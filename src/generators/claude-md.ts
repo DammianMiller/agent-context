@@ -19,20 +19,11 @@ function buildContext(analysis: ProjectAnalysis, config: AgentContextConfig): Re
   const isWebPlatform = hasWebDatabase && !forceDesktop;
   const isDesktopPlatform = !isWebPlatform;
 
-  // Section defaults differ by platform
-  // Web platforms (claude.ai, etc.) have no system access - hide irrelevant sections
-  const sections = config.template?.sections || {
-    memorySystem: !isWebPlatform,      // No IndexedDB/SQLite access in web chat
-    browserUsage: !isWebPlatform,       // No browser automation in web chat
-    decisionLoop: !isWebPlatform,       // Relies on memory system
-    worktreeWorkflow: !isWebPlatform,   // No git access in web chat
-    troubleshooting: true,
-    augmentedCapabilities: !isWebPlatform, // Desktop agent features only
-  };
-
   // Determine long-term memory provider
   let longTermProvider = 'qdrant';
   let longTermEndpoint = config.memory?.longTerm?.endpoint || 'localhost:6333';
+  let longTermCollection = config.memory?.longTerm?.collection || 'agent_memory';
+  
   if (config.memory?.longTerm?.provider === 'github') {
     longTermProvider = 'github';
     longTermEndpoint = `${config.memory?.longTerm?.github?.repo || 'owner/repo'}/${config.memory?.longTerm?.github?.path || '.agent-context/memory'}`;
@@ -40,6 +31,10 @@ function buildContext(analysis: ProjectAnalysis, config: AgentContextConfig): Re
     longTermProvider = 'qdrant-cloud';
     longTermEndpoint = config.memory?.longTerm?.qdrantCloud?.url || 'https://xxxxxx.aws.cloud.qdrant.io:6333';
   }
+
+  // GitHub repo info for web memory
+  const githubRepo = config.memory?.longTerm?.github?.repo || '';
+  const githubMemoryPath = config.memory?.longTerm?.github?.path || '.agent-context/memory';
 
   return {
     PROJECT_NAME: analysis.projectName || config.project.name,
@@ -55,24 +50,17 @@ function buildContext(analysis: ProjectAnalysis, config: AgentContextConfig): Re
     ISSUE_TRACKER_NAME: analysis.issueTracker?.name || 'GitHub Issues',
     ISSUE_TRACKER_URL: analysis.issueTracker?.url || '',
 
-    // Sections - web platforms get streamlined content
-    SHOW_MEMORY_SYSTEM: sections.memorySystem !== false && isDesktopPlatform,
-    SHOW_BROWSER_USAGE: sections.browserUsage !== false && isDesktopPlatform,
-    SHOW_DECISION_LOOP: sections.decisionLoop !== false && isDesktopPlatform,
-    SHOW_WORKTREE_WORKFLOW: sections.worktreeWorkflow !== false && config.worktrees?.enabled && isDesktopPlatform,
-    SHOW_TROUBLESHOOTING: sections.troubleshooting !== false && analysis.troubleshootingHints.length > 0,
-    SHOW_AUGMENTED_CAPABILITIES: sections.augmentedCapabilities !== false && isDesktopPlatform,
-    SHOW_SHELL_COMMANDS: isDesktopPlatform, // Shell commands only relevant for desktop agents
-
-    // Memory config
-    MEMORY_ENABLED: config.memory?.shortTerm?.enabled || config.memory?.longTerm?.enabled,
+    // Memory config - ALWAYS shown, differs by platform
     SHORT_TERM_PATH: config.memory?.shortTerm?.path || './agents/data/memory/short_term.db',
     SHORT_TERM_MAX_ENTRIES: config.memory?.shortTerm?.maxEntries || 50,
     LONG_TERM_PROVIDER: longTermProvider,
     LONG_TERM_ENDPOINT: longTermEndpoint,
-    LONG_TERM_COLLECTION: config.memory?.longTerm?.collection || 'agent_memory',
+    LONG_TERM_COLLECTION: longTermCollection,
+    GITHUB_REPO: githubRepo,
+    GITHUB_MEMORY_PATH: githubMemoryPath,
+    HAS_GITHUB_MEMORY: !!githubRepo,
 
-    // Worktree config
+    // Worktree config - ALWAYS enabled for desktop
     WORKTREE_DIR: config.worktrees?.directory || '.worktrees',
     WORKTREE_PREFIX: config.worktrees?.branchPrefix || 'feature/',
 
@@ -122,6 +110,7 @@ function buildContext(analysis: ProjectAnalysis, config: AgentContextConfig): Re
 
     // Troubleshooting
     TROUBLESHOOTING_HINTS: analysis.troubleshootingHints,
+    HAS_TROUBLESHOOTING: analysis.troubleshootingHints.length > 0,
 
     // Key files
     KEY_FILES: analysis.keyFiles,
@@ -150,57 +139,133 @@ You are an AI assistant helping with the {{PROJECT_NAME}} project.
 
 ---
 
-{{#if IS_WEB_PLATFORM}}
-## About This Context
+## MEMORY SYSTEM (MANDATORY)
 
-This document provides project context for AI assistants in web chat interfaces (claude.ai, etc.).
-You do not have direct system access - focus on code review, explanation, and guidance.
+> **CRITICAL**: Memory updates are MANDATORY, not optional. Every significant discovery, fix, or lesson learned MUST be stored before completing a task.
 
----
-
-{{/if}}
-{{#if SHOW_MEMORY_SYSTEM}}
-## MEMORY SYSTEM
-
+{{#if IS_DESKTOP_PLATFORM}}
 ### Short-term Memory (SQLite: \`{{SHORT_TERM_PATH}}\`)
 
 Table: \`memories\`
-
 - \`id\`: INTEGER PRIMARY KEY
 - \`timestamp\`: TEXT (ISO8601)
 - \`type\`: TEXT (action|observation|thought|goal)
 - \`content\`: TEXT
 
-**BEFORE EACH DECISION**: Query recent entries (last {{SHORT_TERM_MAX_ENTRIES}}) to understand your context
-
+**BEFORE EACH DECISION**: Query recent entries (last {{SHORT_TERM_MAX_ENTRIES}}) to understand context:
 \`\`\`sql
 SELECT * FROM memories ORDER BY id DESC LIMIT {{SHORT_TERM_MAX_ENTRIES}};
 \`\`\`
 
-**AFTER EACH ACTION**: INSERT a new row describing what you did and the outcome
-
+**AFTER EACH ACTION**: Record what you did and the outcome:
 \`\`\`sql
-INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description of action and result');
+INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description...');
 \`\`\`
 
-### Long-term Memory{{#if LONG_TERM_PROVIDER}} ({{LONG_TERM_PROVIDER}}{{#if LONG_TERM_ENDPOINT}}: \`{{LONG_TERM_ENDPOINT}}\`{{/if}}){{/if}}
+### Long-term Memory ({{LONG_TERM_PROVIDER}}: \`{{LONG_TERM_ENDPOINT}}\`, collection: \`{{LONG_TERM_COLLECTION}}\`)
 
 **Start services**: \`agent-context memory start\`
+
+Vector schema:
+- \`id\`: UUID
+- \`vector\`: 384-dim embedding (all-MiniLM-L6-v2)
+- \`payload\`: {type, tags[], content, importance (1-10), timestamp}
 
 **Query memories** (semantic search):
 \`\`\`bash
 agent-context memory query "search term"
 \`\`\`
 
-**Store new memory**:
+**Store new memory** (MANDATORY for significant learnings):
 \`\`\`bash
-agent-context memory store "Description" --tags tag1,tag2 --importance 8
+agent-context memory store <type> "content" --tags tag1,tag2 --importance N
 \`\`\`
+
+Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`
+
+### MANDATORY Memory Triggers
+
+**ALWAYS store to long-term memory when you:**
+1. Fix a bug or resolve an error (lesson)
+2. Discover how a system/component works (discovery)
+3. Learn a configuration requirement (fact)
+4. Find a successful approach to a problem (skill)
+5. Identify a coding pattern or convention (preference)
+6. Complete infrastructure changes (fact)
+7. Debug authentication/networking issues (lesson)
+
+**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.
+
+### Agent Services Setup
+
+\`\`\`bash
+# Start services (auto-creates collection and migrates memories)
+agent-context memory start
+
+# Check status
+agent-context memory status
+
+# Stop services
+agent-context memory stop
+\`\`\`
+
+{{else}}
+### Short-term Memory (localStorage)
+
+You have access to browser localStorage for maintaining context across messages.
+
+Key: \`agent_context_{{PROJECT_NAME}}\`
+
+Structure:
+\`\`\`json
+{
+  "memories": [
+    {"timestamp": "ISO8601", "type": "action|observation|thought|goal", "content": "..."}
+  ],
+  "maxEntries": {{SHORT_TERM_MAX_ENTRIES}}
+}
+\`\`\`
+
+**BEFORE EACH DECISION**: Review recent memories for context
+**AFTER EACH ACTION**: Add a memory describing what you did and the outcome
+
+### Long-term Memory (GitHub: \`.agent-context/memory/\`)
+
+Memories stored as JSON files in the project repository under \`.agent-context/memory/\`
+
+File format: \`{YYYY-MM-DD}_{type}_{short-id}.json\`
+\`\`\`json
+{
+  "id": "uuid",
+  "timestamp": "ISO8601",
+  "type": "fact|lesson|skill|discovery|preference",
+  "content": "Learning or discovery",
+  "tags": ["tag1", "tag2"],
+  "importance": 8
+}
+\`\`\`
+
+Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`
+
+### MANDATORY Memory Triggers
+
+**ALWAYS store to long-term memory when you:**
+1. Fix a bug or resolve an error (lesson)
+2. Discover how a system/component works (discovery)
+3. Learn a configuration requirement (fact)
+4. Find a successful approach to a problem (skill)
+5. Identify a coding pattern or convention (preference)
+6. Complete infrastructure changes (fact)
+7. Debug authentication/networking issues (lesson)
+
+**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.
+
+When you discover something significant, recommend the user commit a memory file to \`.agent-context/memory/\`.
+{{/if}}
 
 ---
 
-{{/if}}
-{{#if SHOW_BROWSER_USAGE}}
+{{#if IS_DESKTOP_PLATFORM}}
 ## BROWSER USAGE
 
 When using browser automation:
@@ -212,7 +277,6 @@ When using browser automation:
 ---
 
 {{/if}}
-{{#if SHOW_DECISION_LOOP}}
 ## DECISION LOOP
 
 1. **READ** short-term memory (recent context)
@@ -220,43 +284,101 @@ When using browser automation:
 3. **THINK** about what to do next
 4. **ACT** - execute your decision
 5. **RECORD** - write to short-term memory
-6. **OPTIONALLY** - if significant learning, add to long-term memory
+6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)
+{{#if IS_DESKTOP_PLATFORM}}
+7. **IF BROWSER ACTION**: Save screenshot to \`/agents/data/screenshots/\`
+{{/if}}
+
+**Task Completion Checklist:**
+- [ ] Short-term memory updated with action outcome
+- [ ] Long-term memory updated with any lessons/discoveries/facts learned
+- [ ] Tests pass (if code changes)
+- [ ] Documentation updated (if applicable)
 
 ---
 
-{{/if}}
-{{#if SHOW_WORKTREE_WORKFLOW}}
-## GIT WORKTREE WORKFLOW (MANDATORY)
+{{#if HAS_SKILLS}}
+## SKILLS
 
-**ALL code changes MUST use isolated git worktrees:**
+You have access to reusable skills. Before attempting complex tasks:
 
-\`\`\`bash
-# Create worktree for new task
-agent-context worktree create <slug>
+1. Check if a skill exists for it (see \`.factory/skills/\`)
+2. Follow the skill's patterns - they're tested and reliable
+3. If you discover a better approach, consider creating/updating a skill
 
-# Work in the worktree
-cd {{WORKTREE_DIR}}/NNN-slug/
+Available skills are auto-discovered. When you see a SKILL.md, follow its instructions.
 
-# Create PR when ready
-agent-context worktree pr <id>
-
-# Cleanup after merge
-agent-context worktree cleanup <id>
-\`\`\`
-
----
-
-{{/if}}
-{{#if HAS_KEY_FILES}}
-## Key Files
-
-{{#each KEY_FILES}}
-- \`{{this.path}}\` - {{this.description}}
+{{#each SKILLS}}
+- \`{{this}}\`
 {{/each}}
 
 ---
 
 {{/if}}
+{{#if IS_DESKTOP_PLATFORM}}
+**MANDATORY WORKFLOW REQUIREMENTS**:
+
+1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (\`{{WORKTREE_PREFIX}}NNN-slug\` branches)
+2. **PR-Based Merges**: NO direct commits to \`{{DEFAULT_BRANCH}}\`. All changes via PR with automated review
+3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed
+4. **Automated Review**: PRs require signoff from reviewer agents before merge
+
+---
+
+{{/if}}
+## Quick Reference
+
+{{#if HAS_CLUSTERS}}
+### Cluster Contexts
+
+\`\`\`bash
+{{#each CLUSTERS}}
+kubectl config use-context {{this.context}}  # {{this.name}} ({{this.purpose}})
+{{/each}}
+\`\`\`
+
+{{/if}}
+{{#if HAS_URLS}}
+### URLs
+
+{{#each URLS}}
+- **{{this.name}}**: {{this.value}}
+{{/each}}
+
+{{/if}}
+{{#if HAS_KEY_FILES}}
+### Key Files
+
+{{#each KEY_FILES}}
+- \`{{this.path}}\` - {{this.description}}
+{{/each}}
+
+{{/if}}
+{{#if IS_DESKTOP_PLATFORM}}
+### Essential Commands
+
+\`\`\`bash
+# Create worktree for new task (MANDATORY for all changes)
+agent-context worktree create <slug>
+
+# Testing
+{{TEST_COMMAND}}
+
+# Linting
+{{LINT_COMMAND}}
+
+# Building
+{{BUILD_COMMAND}}
+{{#if HAS_TERRAFORM}}
+
+# Terraform
+cd {{INFRA_PATH}} && terraform plan
+{{/if}}
+\`\`\`
+
+{{/if}}
+---
+
 {{#if HAS_COMPONENTS}}
 ## Architecture
 
@@ -291,50 +413,7 @@ agent-context worktree cleanup <id>
 ---
 
 {{/if}}
-{{#if HAS_URLS}}
-## Project URLs
-
-{{#each URLS}}
-- **{{this.name}}**: {{this.value}}
-{{/each}}
-
----
-
-{{/if}}
-{{#if SHOW_SHELL_COMMANDS}}
-## Quick Reference
-
-{{#if HAS_CLUSTERS}}
-### Cluster Contexts
-
-\`\`\`bash
-{{#each CLUSTERS}}
-kubectl config use-context {{this.context}}  # {{this.name}} ({{this.purpose}})
-{{/each}}
-\`\`\`
-
-{{/if}}
-### Essential Commands
-
-\`\`\`bash
-# Testing
-{{TEST_COMMAND}}
-
-# Linting
-{{LINT_COMMAND}}
-
-# Building
-{{BUILD_COMMAND}}
-{{#if HAS_TERRAFORM}}
-
-# Terraform
-cd {{INFRA_PATH}} && terraform plan
-{{/if}}
-\`\`\`
-
----
-
-{{/if}}
+{{#if IS_DESKTOP_PLATFORM}}
 {{#if HAS_CICD}}
 ## CI/CD ({{CICD_PLATFORM}})
 
@@ -347,7 +426,8 @@ cd {{INFRA_PATH}} && terraform plan
 ---
 
 {{/if}}
-{{#if SHOW_TROUBLESHOOTING}}
+{{/if}}
+{{#if HAS_TROUBLESHOOTING}}
 ## Troubleshooting
 
 | Symptom | Solution |
@@ -359,56 +439,93 @@ cd {{INFRA_PATH}} && terraform plan
 ---
 
 {{/if}}
-{{#if HAS_SECURITY_NOTES}}
-## Security Considerations
+{{#if IS_DESKTOP_PLATFORM}}
+## Required Workflow (MANDATORY)
 
-{{#each SECURITY_NOTES}}
-- {{this}}
-{{/each}}
+### Git Worktree Workflow (ALL Changes)
+
+**Every code change MUST follow this workflow:**
+
+\`\`\`
+1. CREATE WORKTREE
+   agent-context worktree create <slug>
+   → Creates {{WORKTREE_PREFIX}}NNN-slug branch in {{WORKTREE_DIR}}/NNN-slug/
+
+2. DEVELOP
+   cd {{WORKTREE_DIR}}/NNN-slug/
+   → Make changes, commit locally
+
+3. CREATE PR (runs tests + triggers reviewers)
+   agent-context worktree pr <id>
+   → Runs all offline tests (blocks if fail)
+   → Pushes to origin
+   → Creates PR with auto-generated description
+   → Triggers reviewer agents
+
+4. AUTOMATED REVIEW
+   → Reviewer agents run in parallel (quality, security, performance, tests)
+   → PR labeled: reviewer-approved OR needs-work
+   → Auto-merge on approval
+
+5. CLEANUP
+   agent-context worktree cleanup <id>
+   → Removes worktree and deletes branch
+\`\`\`
+
+### Before ANY Task
+
+1. Read relevant docs in \`/docs\` and component folders
+2. Check for known issues in troubleshooting section
+3. **Create a worktree for your changes**
+
+### For Code Changes
+
+1. **Create worktree**: \`agent-context worktree create <slug>\`
+2. Update/create tests
+3. Run \`{{TEST_COMMAND}}\`
+4. Run linting and type checking
+5. **Create PR**: \`agent-context worktree pr <id>\`
+
+{{#if HAS_TERRAFORM}}
+### For Infrastructure Changes
+
+1. **Create worktree** for Terraform changes
+2. Update Terraform in \`{{INFRA_PATH}}\`
+3. Update CI/CD workflows if needed
+4. Run \`terraform plan\`
+5. Update secrets via GitHub Actions (not locally)
+6. **Create PR** with automated review
+
+{{/if}}
+### Before Completing
+
+1. All tests pass (enforced by pre-push hook)
+2. PR created and reviewed by agents
+3. Update relevant documentation
 
 ---
 
 {{/if}}
-{{#if SHOW_AUGMENTED_CAPABILITIES}}
+{{#if HAS_DROIDS}}
 ## Augmented Agent Capabilities
 
-{{#if HAS_DROIDS}}
 ### Custom Droids (\`.factory/droids/\`)
 
 {{#each DROIDS}}
 - \`{{this}}\`
 {{/each}}
 
-{{/if}}
-{{#if HAS_SKILLS}}
-### Skills (\`.factory/skills/\`)
-
-{{#each SKILLS}}
-- \`{{this}}\`
-{{/each}}
-
-{{/if}}
 {{#if HAS_COMMANDS}}
 ### Commands (\`.factory/commands/\`)
 
 {{#each COMMANDS}}
 - \`/{{this}}\`
 {{/each}}
+{{/if}}
+
+---
 
 {{/if}}
-{{/if}}
-{{#if IS_WEB_PLATFORM}}
-## Review Guidelines
-
-When reviewing code for this project:
-
-- Check for multi-tenancy: all queries should be scoped by \`owner_id\`
-- Verify parameterized SQL queries (no string concatenation)
-- Ensure proper error handling patterns are followed
-- Look for hardcoded credentials or secrets
-- Validate input sanitization on user-facing endpoints
-
-{{else}}
 ## Completion Checklist
 
 \`\`\`
@@ -421,7 +538,6 @@ When reviewing code for this project:
 [ ] No secrets in code/commits
 \`\`\`
 
-{{/if}}
 ---
 
 **Languages**: {{LANGUAGES}}
