@@ -348,28 +348,105 @@
       
       output += '\n---\n\n';
 
-      // Web-specific intro
+      // Memory System - both platforms
+      output += `## MEMORY SYSTEM (MANDATORY)\n\n`;
+      output += `> **CRITICAL**: Memory updates are MANDATORY, not optional. Every significant discovery, fix, or lesson learned MUST be stored before completing a task.\n\n`;
+      
       if (isWeb) {
-        output += `## About This Context\n\n`;
-        output += `This document provides project context for AI assistants in web chat interfaces (claude.ai, factory.ai, etc.).\n`;
-        output += `You do not have direct system access - focus on code review, explanation, and guidance.\n\n`;
+        output += `### Short-term Memory (localStorage)\n\n`;
+        output += `You have access to browser localStorage for maintaining context across messages.\n\n`;
+        output += `Key: \`agent_context_${projectName}\`\n\n`;
+        output += `Structure:\n\`\`\`json\n{\n  "memories": [\n    {"timestamp": "ISO8601", "type": "action|observation|thought|goal", "content": "..."}\n  ],\n  "maxEntries": 50\n}\n\`\`\`\n\n`;
+        output += `**BEFORE EACH DECISION**: Review recent memories for context\n`;
+        output += `**AFTER EACH ACTION**: Add a memory describing what you did and the outcome\n\n`;
+        output += `### Long-term Memory (GitHub: \`.agent-context/memory/\`)\n\n`;
+        output += `Memories stored as JSON files in the project repository under \`.agent-context/memory/\`\n\n`;
+        output += `File format: \`{YYYY-MM-DD}_{type}_{short-id}.json\`\n`;
+        output += `\`\`\`json\n{\n  "id": "uuid",\n  "timestamp": "ISO8601",\n  "type": "fact|lesson|skill|discovery|preference",\n  "content": "Learning or discovery",\n  "tags": ["tag1", "tag2"],\n  "importance": 8\n}\n\`\`\`\n\n`;
+        output += `Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`\n\n`;
+        output += `### MANDATORY Memory Triggers\n\n`;
+        output += `**ALWAYS store to long-term memory when you:**\n`;
+        output += `1. Fix a bug or resolve an error (lesson)\n`;
+        output += `2. Discover how a system/component works (discovery)\n`;
+        output += `3. Learn a configuration requirement (fact)\n`;
+        output += `4. Find a successful approach to a problem (skill)\n`;
+        output += `5. Identify a coding pattern or convention (preference)\n`;
+        output += `6. Complete infrastructure changes (fact)\n`;
+        output += `7. Debug authentication/networking issues (lesson)\n\n`;
+        output += `**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.\n\n`;
+        output += `When you discover something significant, recommend the user commit a memory file to \`.agent-context/memory/\`.\n\n`;
+        output += `---\n\n`;
+        
+        // Decision Loop for web
+        output += `## DECISION LOOP\n\n`;
+        output += `1. **READ** short-term memory (recent context)\n`;
+        output += `2. **QUERY** long-term memory (semantic search for relevant learnings)\n`;
+        output += `3. **THINK** about what to do next\n`;
+        output += `4. **ACT** - execute your decision\n`;
+        output += `5. **RECORD** - write to short-term memory\n`;
+        output += `6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)\n\n`;
+        output += `**Task Completion Checklist:**\n`;
+        output += `- [ ] Short-term memory updated with action outcome\n`;
+        output += `- [ ] Long-term memory updated with any lessons/discoveries/facts learned\n`;
+        output += `- [ ] Tests pass (if code changes)\n`;
+        output += `- [ ] Documentation updated (if applicable)\n\n`;
+        output += `---\n\n`;
+        
+        // Workflow for web
+        output += `**MANDATORY WORKFLOW REQUIREMENTS**:\n\n`;
+        output += `1. **Feature Branches**: ALL code changes MUST use isolated feature branches (\`feature/description\`)\n`;
+        output += `2. **PR-Based Merges**: NO direct commits to \`main\`. All changes via PR\n`;
+        output += `3. **Code Review**: PRs should be reviewed before merge\n\n`;
+        output += `---\n\n`;
+        output += `## Required Workflow (MANDATORY)\n\n`;
+        output += `### Git Branch Workflow (ALL Changes)\n\n`;
+        output += `**Every code change MUST follow this workflow:**\n\n`;
+        output += `\`\`\`\n`;
+        output += `1. CREATE BRANCH\n   git checkout -b feature/<description>\n   → Creates isolated feature branch\n\n`;
+        output += `2. DEVELOP\n   → Make changes, commit locally\n   → Keep commits atomic and well-described\n\n`;
+        output += `3. CREATE PR\n   git push -u origin feature/<description>\n   → Push to remote\n   → Create PR via GitHub/GitLab UI\n\n`;
+        output += `4. CODE REVIEW\n   → Request review from team members\n   → Address feedback\n\n`;
+        output += `5. MERGE & CLEANUP\n   → Merge PR after approval\n   → Delete feature branch\n`;
+        output += `\`\`\`\n\n`;
         output += `---\n\n`;
       }
 
       // Desktop-only sections
       if (!isWeb) {
         if (includeMemory) {
-          output += `## MEMORY SYSTEM\n\n`;
           output += `### Short-term Memory (SQLite: \`./agents/data/memory/short_term.db\`)\n\n`;
-          output += `Table: \`memories\`\n\n`;
+          output += `Table: \`memories\`\n`;
           output += `- \`id\`: INTEGER PRIMARY KEY\n`;
           output += `- \`timestamp\`: TEXT (ISO8601)\n`;
           output += `- \`type\`: TEXT (action|observation|thought|goal)\n`;
           output += `- \`content\`: TEXT\n\n`;
-          output += `**BEFORE EACH DECISION**: Query recent entries (last 50) to understand your context\n\n`;
+          output += `**BEFORE EACH DECISION**: Query recent entries (last 50) to understand context:\n`;
           output += `\`\`\`sql\nSELECT * FROM memories ORDER BY id DESC LIMIT 50;\n\`\`\`\n\n`;
-          output += `**AFTER EACH ACTION**: INSERT a new row describing what you did and the outcome\n\n`;
-          output += `\`\`\`sql\nINSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description of action and result');\n\`\`\`\n\n`;
+          output += `**AFTER EACH ACTION**: Record what you did and the outcome:\n`;
+          output += `\`\`\`sql\nINSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description...');\n\`\`\`\n\n`;
+          output += `### Long-term Memory (Qdrant: \`localhost:6333\`, collection: \`agent_memory\`)\n\n`;
+          output += `**Start services**: \`agent-context memory start\`\n\n`;
+          output += `Vector schema:\n`;
+          output += `- \`id\`: UUID\n`;
+          output += `- \`vector\`: 384-dim embedding (all-MiniLM-L6-v2)\n`;
+          output += `- \`payload\`: {type, tags[], content, importance (1-10), timestamp}\n\n`;
+          output += `**Query memories** (semantic search):\n`;
+          output += `\`\`\`bash\nagent-context memory query "search term"\n\`\`\`\n\n`;
+          output += `**Store new memory** (MANDATORY for significant learnings):\n`;
+          output += `\`\`\`bash\nagent-context memory store <type> "content" --tags tag1,tag2 --importance N\n\`\`\`\n\n`;
+          output += `Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`\n\n`;
+          output += `### MANDATORY Memory Triggers\n\n`;
+          output += `**ALWAYS store to long-term memory when you:**\n`;
+          output += `1. Fix a bug or resolve an error (lesson)\n`;
+          output += `2. Discover how a system/component works (discovery)\n`;
+          output += `3. Learn a configuration requirement (fact)\n`;
+          output += `4. Find a successful approach to a problem (skill)\n`;
+          output += `5. Identify a coding pattern or convention (preference)\n`;
+          output += `6. Complete infrastructure changes (fact)\n`;
+          output += `7. Debug authentication/networking issues (lesson)\n\n`;
+          output += `**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.\n\n`;
+          output += `### Agent Services Setup\n\n`;
+          output += `\`\`\`bash\n# Start services (auto-creates collection and migrates memories)\nagent-context memory start\n\n# Check status\nagent-context memory status\n\n# Stop services\nagent-context memory stop\n\`\`\`\n\n`;
           output += `---\n\n`;
         }
 
@@ -389,18 +466,32 @@
           output += `3. **THINK** about what to do next\n`;
           output += `4. **ACT** - execute your decision\n`;
           output += `5. **RECORD** - write to short-term memory\n`;
-          output += `6. **OPTIONALLY** - if significant learning, add to long-term memory\n\n`;
+          output += `6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)\n`;
+          output += `7. **IF BROWSER ACTION**: Save screenshot to \`/agents/data/screenshots/\`\n\n`;
+          output += `**Task Completion Checklist:**\n`;
+          output += `- [ ] Short-term memory updated with action outcome\n`;
+          output += `- [ ] Long-term memory updated with any lessons/discoveries/facts learned\n`;
+          output += `- [ ] Tests pass (if code changes)\n`;
+          output += `- [ ] Documentation updated (if applicable)\n\n`;
           output += `---\n\n`;
         }
 
         if (includeWorktree) {
-          output += `## GIT WORKTREE WORKFLOW (MANDATORY)\n\n`;
-          output += `**ALL code changes MUST use isolated git worktrees:**\n\n`;
-          output += `\`\`\`bash\n`;
-          output += `# Create worktree for new task\nagent-context worktree create <slug>\n\n`;
-          output += `# Work in the worktree\ncd .worktrees/NNN-slug/\n\n`;
-          output += `# Create PR when ready\nagent-context worktree pr <id>\n\n`;
-          output += `# Cleanup after merge\nagent-context worktree cleanup <id>\n`;
+          output += `**MANDATORY WORKFLOW REQUIREMENTS**:\n\n`;
+          output += `1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (\`feature/NNN-slug\` branches)\n`;
+          output += `2. **PR-Based Merges**: NO direct commits to \`main\`. All changes via PR with automated review\n`;
+          output += `3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed\n`;
+          output += `4. **Automated Review**: PRs require signoff from reviewer agents before merge\n\n`;
+          output += `---\n\n`;
+          output += `## Required Workflow (MANDATORY)\n\n`;
+          output += `### Git Worktree Workflow (ALL Changes)\n\n`;
+          output += `**Every code change MUST follow this workflow:**\n\n`;
+          output += `\`\`\`\n`;
+          output += `1. CREATE WORKTREE\n   agent-context worktree create <slug>\n   → Creates feature/NNN-slug branch in .worktrees/NNN-slug/\n\n`;
+          output += `2. DEVELOP\n   cd .worktrees/NNN-slug/\n   → Make changes, commit locally\n\n`;
+          output += `3. CREATE PR (runs tests + triggers reviewers)\n   agent-context worktree pr <id>\n   → Runs all offline tests (blocks if fail)\n   → Pushes to origin\n   → Creates PR with auto-generated description\n   → Triggers reviewer agents\n\n`;
+          output += `4. AUTOMATED REVIEW\n   → Reviewer agents run in parallel (quality, security, performance, tests)\n   → PR labeled: reviewer-approved OR needs-work\n   → Auto-merge on approval\n\n`;
+          output += `5. CLEANUP\n   agent-context worktree cleanup <id>\n   → Removes worktree and deletes branch\n`;
           output += `\`\`\`\n\n`;
           output += `---\n\n`;
         }
@@ -454,24 +545,14 @@
         output += customSections + '\n\n---\n\n';
       }
 
-      // Review guidelines for web
-      if (isWeb) {
-        output += `## Review Guidelines\n\n`;
-        output += `When reviewing code for this project:\n\n`;
-        output += `- Verify proper error handling patterns are followed\n`;
-        output += `- Look for hardcoded credentials or secrets\n`;
-        output += `- Validate input sanitization on user-facing endpoints\n`;
-        output += `- Check for consistent coding style\n`;
-        output += `- Ensure tests cover the changes\n\n`;
-      } else {
-        output += `## Completion Checklist\n\n`;
-        output += `\`\`\`\n`;
-        output += `[ ] Tests updated and passing\n`;
-        output += `[ ] Linting/type checking passed\n`;
-        output += `[ ] Documentation updated\n`;
-        output += `[ ] No secrets in code/commits\n`;
-        output += `\`\`\`\n\n`;
-      }
+      // Completion Checklist for both platforms
+      output += `## Completion Checklist\n\n`;
+      output += `\`\`\`\n`;
+      output += `[ ] Tests updated and passing\n`;
+      output += `[ ] Linting/type checking passed\n`;
+      output += `[ ] Documentation updated\n`;
+      output += `[ ] No secrets in code/commits\n`;
+      output += `\`\`\`\n\n`;
 
       output += `---\n\n`;
       output += `**Languages**: ${languages || 'Not specified'}\n`;
