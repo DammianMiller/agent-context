@@ -68,6 +68,17 @@ Options:
   -p, --platform      Generate for specific platform only
 ```
 
+**Smart Merging**: When a `CLAUDE.md` or `AGENT.md` file already exists, the CLI will offer to:
+- **Merge** (recommended): Updates standard sections while preserving your custom sections
+- **Overwrite**: Replace the entire file with newly generated content
+- **Cancel/Skip**: Leave the existing file unchanged
+
+The merge strategy:
+- Updates the preamble (project name, description) from new analysis
+- Replaces standard sections (Memory System, Browser Usage, Quick Reference, etc.) with updated versions
+- Preserves any custom sections you've added
+- Appends custom sections at the end of the file
+
 ### Memory Management
 
 ```bash

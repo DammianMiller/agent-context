@@ -1,10 +1,11 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import inquirer from 'inquirer';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { analyzeProject } from '../analyzers/index.js';
 import { generateClaudeMd } from '../generators/claude-md.js';
+import { mergeClaudeMd } from '../utils/merge-claude-md.js';
 import type { AgentContextConfig, Platform } from '../types/index.js';
 
 interface InitOptions {
@@ -178,14 +179,61 @@ export async function initCommand(options: InitOptions): Promise<void> {
   }
 
   // Generate CLAUDE.md
-  const claudeSpinner = ora('Generating CLAUDE.md...').start();
-  try {
-    const claudeMd = await generateClaudeMd(analysis, config);
-    writeFileSync(join(cwd, 'CLAUDE.md'), claudeMd);
-    claudeSpinner.succeed('Generated CLAUDE.md');
-  } catch (error) {
-    claudeSpinner.fail('Failed to generate CLAUDE.md');
-    console.error(chalk.red(error));
+  const claudeMdPath = join(cwd, 'CLAUDE.md');
+  const agentMdPath = join(cwd, 'AGENT.md');
+  const claudeMdExists = existsSync(claudeMdPath);
+  const agentMdExists = existsSync(agentMdPath);
+  
+  let existingContent: string | undefined;
+  let targetPath = claudeMdPath;
+  let shouldGenerateClaude = true;
+  
+  if ((claudeMdExists || agentMdExists) && !options.force) {
+    // Read existing content
+    if (claudeMdExists) {
+      existingContent = readFileSync(claudeMdPath, 'utf-8');
+      targetPath = claudeMdPath;
+    } else if (agentMdExists) {
+      existingContent = readFileSync(agentMdPath, 'utf-8');
+      targetPath = agentMdPath;
+    }
+    
+    const { action } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'action',
+        message: `${claudeMdExists ? 'CLAUDE.md' : 'AGENT.md'} already exists. What would you like to do?`,
+        choices: [
+          { name: 'Merge with existing content (recommended)', value: 'merge' },
+          { name: 'Overwrite completely', value: 'overwrite' },
+          { name: 'Skip generation', value: 'skip' },
+        ],
+        default: 'merge',
+      },
+    ]);
+    
+    if (action === 'skip') {
+      shouldGenerateClaude = false;
+      console.log(chalk.dim('Skipping CLAUDE.md generation'));
+    } else if (action === 'overwrite') {
+      existingContent = undefined;
+    }
+  }
+  
+  if (shouldGenerateClaude) {
+    const claudeSpinner = ora(`${existingContent ? 'Merging' : 'Generating'} CLAUDE.md...`).start();
+    try {
+      const newClaudeMd = await generateClaudeMd(analysis, config);
+      const claudeMd = existingContent ? mergeClaudeMd(existingContent, newClaudeMd) : newClaudeMd;
+      writeFileSync(targetPath, claudeMd);
+      claudeSpinner.succeed(`${existingContent ? 'Merged and updated' : 'Generated'} ${targetPath.endsWith('CLAUDE.md') ? 'CLAUDE.md' : 'AGENT.md'}`);
+      if (existingContent) {
+        console.log(chalk.dim('  Preserved custom sections from existing file'));
+      }
+    } catch (error) {
+      claudeSpinner.fail(`Failed to ${existingContent ? 'merge' : 'generate'} CLAUDE.md`);
+      console.error(chalk.red(error));
+    }
   }
 
   // Platform-specific setup

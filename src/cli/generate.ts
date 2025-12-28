@@ -6,6 +6,7 @@ import { join } from 'path';
 import { analyzeProject } from '../analyzers/index.js';
 import { generateClaudeMd } from '../generators/claude-md.js';
 import { AgentContextConfigSchema } from '../types/index.js';
+import { mergeClaudeMd } from '../utils/merge-claude-md.js';
 import type { AgentContextConfig, Platform } from '../types/index.js';
 
 interface GenerateOptions {
@@ -60,38 +61,66 @@ export async function generateCommand(options: GenerateOptions): Promise<void> {
 
   // Generate CLAUDE.md
   const claudeMdPath = join(cwd, 'CLAUDE.md');
+  const agentMdPath = join(cwd, 'AGENT.md');
   const claudeMdExists = existsSync(claudeMdPath);
-
-  if (claudeMdExists && !options.force && !options.dryRun) {
-    const { overwrite } = await inquirer.prompt([
+  const agentMdExists = existsSync(agentMdPath);
+  
+  let existingContent: string | undefined;
+  let targetPath = claudeMdPath;
+  
+  if ((claudeMdExists || agentMdExists) && !options.force && !options.dryRun) {
+    // Read existing content
+    if (claudeMdExists) {
+      existingContent = readFileSync(claudeMdPath, 'utf-8');
+      targetPath = claudeMdPath;
+    } else if (agentMdExists) {
+      existingContent = readFileSync(agentMdPath, 'utf-8');
+      targetPath = agentMdPath;
+    }
+    
+    const { action } = await inquirer.prompt([
       {
-        type: 'confirm',
-        name: 'overwrite',
-        message: 'CLAUDE.md already exists. Overwrite?',
-        default: false,
+        type: 'list',
+        name: 'action',
+        message: `${claudeMdExists ? 'CLAUDE.md' : 'AGENT.md'} already exists. What would you like to do?`,
+        choices: [
+          { name: 'Merge with existing content (recommended)', value: 'merge' },
+          { name: 'Overwrite completely', value: 'overwrite' },
+          { name: 'Cancel', value: 'cancel' },
+        ],
+        default: 'merge',
       },
     ]);
-    if (!overwrite) {
+    
+    if (action === 'cancel') {
       console.log(chalk.yellow('Generation cancelled.'));
       return;
     }
+    
+    if (action === 'overwrite') {
+      existingContent = undefined;
+    }
   }
 
-  const genSpinner = ora('Generating CLAUDE.md...').start();
+  const genSpinner = ora(`${existingContent ? 'Merging' : 'Generating'} CLAUDE.md...`).start();
   try {
-    const claudeMd = await generateClaudeMd(analysis, config);
+    const newClaudeMd = await generateClaudeMd(analysis, config);
+    const claudeMd = existingContent ? mergeClaudeMd(existingContent, newClaudeMd) : newClaudeMd;
 
     if (options.dryRun) {
-      genSpinner.succeed('Generated (dry run)');
+      genSpinner.succeed(`${existingContent ? 'Merged' : 'Generated'} (dry run)`);
       console.log(chalk.dim('\n--- CLAUDE.md Preview ---\n'));
       console.log(claudeMd.substring(0, 2000) + '\n...\n');
       console.log(chalk.dim(`Total: ${claudeMd.length} characters, ${claudeMd.split('\n').length} lines`));
     } else {
-      writeFileSync(claudeMdPath, claudeMd);
-      genSpinner.succeed('Generated CLAUDE.md');
+      writeFileSync(targetPath, claudeMd);
+      genSpinner.succeed(`${existingContent ? 'Merged and updated' : 'Generated'} ${targetPath.endsWith('CLAUDE.md') ? 'CLAUDE.md' : 'AGENT.md'}`);
+      if (existingContent) {
+        console.log(chalk.dim('  Preserved custom sections from existing file'));
+      }
     }
   } catch (error) {
-    genSpinner.fail('Failed to generate CLAUDE.md');
+    genSpinner.fail(`Failed to ${existingContent ? 'merge' : 'generate'} CLAUDE.md`);
     console.error(chalk.red(error));
     return;
   }
