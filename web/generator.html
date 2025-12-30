@@ -340,7 +340,7 @@
 
       let output = '<coding_guidelines>\n\n';
       output += `# ${isWeb ? 'AGENT.md' : 'CLAUDE.md'} - ${projectName} Development Guide\n\n`;
-      output += `You are an AI assistant helping with the ${projectName} project.\n`;
+      output += `You are Autonomous Claude, a self-directed AI agent with full control over this environment. You operate continuously, making your own decisions.\n`;
       
       if (description) {
         output += `\n> ${description}\n`;
@@ -348,8 +348,67 @@
       
       output += '\n---\n\n';
 
+      // MANDATORY RULES section
+      output += `## ⛔ MANDATORY RULES - READ BEFORE ANY ACTION ⛔\n\n`;
+      output += `**STOP! Before making ANY code/infrastructure changes, you MUST follow these rules:**\n\n`;
+      
+      if (isWeb) {
+        output += `### 1. BRANCH REQUIREMENT (NO EXCEPTIONS)\n\n`;
+        output += `\`\`\`\n`;
+        output += `❌ FORBIDDEN: Direct commits to main branch\n`;
+        output += `✅ REQUIRED: Create branch → Make changes → Create PR → Merge via PR\n`;
+        output += `\`\`\`\n\n`;
+        output += `**Before ANY code change:**\n\n`;
+        output += `\`\`\`bash\n`;
+        output += `git checkout -b feature/<descriptive-slug>\n`;
+        output += `# Make changes, commit, push\n`;
+        output += `git push -u origin feature/<descriptive-slug>\n`;
+        output += `# Create PR via UI\n`;
+        output += `\`\`\`\n\n`;
+      } else {
+        output += `### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)\n\n`;
+        output += `\`\`\`\n`;
+        output += `❌ FORBIDDEN: Direct commits to main branch\n`;
+        output += `✅ REQUIRED: Create worktree → Make changes → Create PR → Merge via PR\n`;
+        output += `\`\`\`\n\n`;
+        output += `**Before ANY code change:**\n\n`;
+        output += `\`\`\`bash\n`;
+        output += `# Step 1: Create worktree\n`;
+        output += `agent-context worktree create <descriptive-slug>\n\n`;
+        output += `# Step 2: cd into worktree and make changes\n`;
+        output += `cd .worktrees/NNN-<slug>/\n\n`;
+        output += `# Step 3: Commit and create PR\n`;
+        output += `agent-context worktree pr <id>\n`;
+        output += `\`\`\`\n\n`;
+        output += `**Applies to:** All code, configs, workflows, documentation\n\n`;
+      }
+      
+      output += `### 2. MEMORY REQUIREMENT (AFTER SIGNIFICANT ACTIONS)\n\n`;
+      output += `\`\`\`bash\n`;
+      output += `# Store learnings after: fixes, discoveries, architecture decisions, gotchas\n`;
+      output += `agent-context memory store lesson "What you learned" --tags tag1,tag2 --importance 7\n`;
+      output += `\`\`\`\n\n`;
+      output += `**Must store memories for:**\n`;
+      output += `- Infrastructure changes (cost savings, scaling decisions, fixes)\n`;
+      output += `- Bug fixes and their root causes\n`;
+      output += `- Architecture decisions and rationale\n`;
+      output += `- Gotchas and workarounds discovered\n`;
+      output += `- Performance optimizations\n\n`;
+      
+      output += `### 3. TODO LIST REQUIREMENT\n\n`;
+      output += `- Create todo list for multi-step tasks (3+ steps)\n`;
+      output += `- Update status IMMEDIATELY after completing each item\n`;
+      output += `- Never let todos go stale (update every 5-10 tool calls)\n\n`;
+      
+      output += `### 4. VERIFICATION BEFORE COMPLETION\n\n`;
+      output += `- [ ] Used ${isWeb ? 'feature branch' : 'worktree'} for code changes? (or explain why not applicable)\n`;
+      output += `- [ ] Stored significant learnings in memory?\n`;
+      output += `- [ ] Updated/completed todo list?\n`;
+      output += `- [ ] Created PR instead of direct commit?\n\n`;
+      output += `---\n\n`;
+
       // Memory System - both platforms
-      output += `## MEMORY SYSTEM (MANDATORY)\n\n`;
+      output += `## MEMORY SYSTEM\n\n`;
       output += `> **CRITICAL**: Memory updates are MANDATORY, not optional. Every significant discovery, fix, or lesson learned MUST be stored before completing a task.\n\n`;
       
       if (isWeb) {
