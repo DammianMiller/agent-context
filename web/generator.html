@@ -348,27 +348,102 @@
       
       output += '\n---\n\n';
 
+      // CRITICAL DECISION LOOP - THE CORE OF THE TEMPLATE
+      output += `## ⚠️⚠️⚠️ CRITICAL: READ THIS FIRST - EVERY SINGLE TIME ⚠️⚠️⚠️\n\n`;
+      output += `**YOU MUST FOLLOW THE DECISION LOOP BELOW FOR EVERY ACTION. NO EXCEPTIONS.**\n\n`;
+      output += `\`\`\`\n`;
+      output += `┌─────────────────────────────────────────────────────────────────────────────┐\n`;
+      output += `│                         MANDATORY DECISION LOOP                              │\n`;
+      output += `│                     (Execute this for EVERY task)                            │\n`;
+      output += `├─────────────────────────────────────────────────────────────────────────────┤\n`;
+      output += `│                                                                              │\n`;
+      output += `│  1. READ MEMORY FIRST                                                        │\n`;
+      if (isWeb) {
+        output += `│     ├─ Check localStorage for recent context                                │\n`;
+        output += `│     └─ Review .agent-context/memory/ for relevant learnings                 │\n`;
+      } else {
+        output += `│     ├─ Query short-term: sqlite3 ./agents/data/memory/short_term.db         │\n`;
+        output += `│     │    "SELECT * FROM memories ORDER BY id DESC LIMIT 20;"               │\n`;
+        output += `│     └─ Query long-term: agent-context memory query "<keywords>"             │\n`;
+      }
+      output += `│                                                                              │\n`;
+      output += `│  2. CHECK FOR APPLICABLE SKILLS                                              │\n`;
+      output += `│     ├─ Review .factory/skills/ for relevant skills                          │\n`;
+      output += `│     ├─ Use design skill for ANY UI/design work                              │\n`;
+      output += `│     └─ Invoke skill BEFORE starting implementation                          │\n`;
+      output += `│                                                                              │\n`;
+      if (isWeb) {
+        output += `│  3. CREATE FEATURE BRANCH (for ANY code changes)                            │\n`;
+        output += `│     ├─ git checkout -b feature/<descriptive-slug>                          │\n`;
+        output += `│     └─ NEVER commit directly to main                                        │\n`;
+      } else {
+        output += `│  3. CREATE WORKTREE (for ANY code changes)                                  │\n`;
+        output += `│     ├─ agent-context worktree create <slug>                                │\n`;
+        output += `│     ├─ cd .worktrees/NNN-<slug>/                                           │\n`;
+        output += `│     └─ NEVER commit directly to main                                        │\n`;
+      }
+      output += `│                                                                              │\n`;
+      output += `│  4. CREATE TODO LIST (for 3+ step tasks)                                     │\n`;
+      output += `│     ├─ Use TodoWrite tool immediately                                        │\n`;
+      output += `│     ├─ Update status after EACH step                                         │\n`;
+      output += `│     └─ Mark completed items immediately                                      │\n`;
+      output += `│                                                                              │\n`;
+      output += `│  5. DO THE WORK                                                              │\n`;
+      output += `│     ├─ Implement changes                                                     │\n`;
+      output += `│     ├─ Run tests                                                             │\n`;
+      if (isWeb) {
+        output += `│     └─ Create PR via GitHub/GitLab UI                                       │\n`;
+      } else {
+        output += `│     └─ Create PR via agent-context worktree pr <id>                        │\n`;
+      }
+      output += `│                                                                              │\n`;
+      output += `│  6. UPDATE MEMORY (after EVERY significant action)                           │\n`;
+      if (isWeb) {
+        output += `│     ├─ Short-term: Update localStorage context                              │\n`;
+        output += `│     └─ Long-term: Create memory file in .agent-context/memory/              │\n`;
+      } else {
+        output += `│     ├─ Short-term: INSERT INTO memories...                                  │\n`;
+        output += `│     └─ Long-term: agent-context memory store lesson...                     │\n`;
+      }
+      output += `│                                                                              │\n`;
+      output += `│  7. VERIFY BEFORE RESPONDING                                                 │\n`;
+      output += `│     ├─ [ ] Memory updated?                                                   │\n`;
+      output += `│     ├─ [ ] ${isWeb ? 'Feature branch' : 'Worktree'} used?                                                    │\n`;
+      output += `│     ├─ [ ] PR created (not direct commit)?                                   │\n`;
+      output += `│     ├─ [ ] Todos updated?                                                    │\n`;
+      output += `│     └─ [ ] Skills consulted?                                                 │\n`;
+      output += `│                                                                              │\n`;
+      output += `└─────────────────────────────────────────────────────────────────────────────┘\n`;
+      output += `\`\`\`\n\n`;
+      output += `---\n\n`;
+
       // MANDATORY RULES section
-      output += `## ⛔ MANDATORY RULES - READ BEFORE ANY ACTION ⛔\n\n`;
-      output += `**STOP! Before making ANY code/infrastructure changes, you MUST follow these rules:**\n\n`;
+      output += `## ⛔ MANDATORY RULES - ZERO TOLERANCE ⛔\n\n`;
+      output += `**FAILURE TO FOLLOW THESE RULES IS A CRITICAL ERROR. STOP AND RE-READ IF UNSURE.**\n\n`;
       
       if (isWeb) {
         output += `### 1. BRANCH REQUIREMENT (NO EXCEPTIONS)\n\n`;
         output += `\`\`\`\n`;
         output += `❌ FORBIDDEN: Direct commits to main branch\n`;
+        output += `❌ FORBIDDEN: Making changes without creating branch first\n`;
         output += `✅ REQUIRED: Create branch → Make changes → Create PR → Merge via PR\n`;
         output += `\`\`\`\n\n`;
         output += `**Before ANY code change:**\n\n`;
         output += `\`\`\`bash\n`;
-        output += `git checkout -b feature/<descriptive-slug>\n`;
-        output += `# Make changes, commit, push\n`;
+        output += `# Step 1: Create feature branch\n`;
+        output += `git checkout -b feature/<descriptive-slug>\n\n`;
+        output += `# Step 2: Make changes, commit\n`;
+        output += `git add . && git commit -m "feat: description"\n\n`;
+        output += `# Step 3: Push and create PR\n`;
         output += `git push -u origin feature/<descriptive-slug>\n`;
-        output += `# Create PR via UI\n`;
+        output += `# Create PR via GitHub/GitLab UI\n`;
         output += `\`\`\`\n\n`;
+        output += `**Applies to:** All code, configs, workflows, documentation\n\n`;
       } else {
         output += `### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)\n\n`;
         output += `\`\`\`\n`;
         output += `❌ FORBIDDEN: Direct commits to main branch\n`;
+        output += `❌ FORBIDDEN: Making changes without creating worktree first\n`;
         output += `✅ REQUIRED: Create worktree → Make changes → Create PR → Merge via PR\n`;
         output += `\`\`\`\n\n`;
         output += `**Before ANY code change:**\n\n`;
@@ -382,179 +457,212 @@
         output += `\`\`\`\n\n`;
         output += `**Applies to:** All code, configs, workflows, documentation\n\n`;
       }
-      
-      output += `### 2. MEMORY REQUIREMENT (AFTER SIGNIFICANT ACTIONS)\n\n`;
+
+      output += `### 2. MEMORY REQUIREMENT (MANDATORY - NOT OPTIONAL)\n\n`;
+      output += `**You MUST update memory. This is not a suggestion.**\n\n`;
+      if (isWeb) {
+        output += `\`\`\`bash\n`;
+        output += `# AFTER EVERY SIGNIFICANT ACTION - update context:\n`;
+        output += `# Store in localStorage or recommend committing to .agent-context/memory/\n\n`;
+        output += `# AFTER EVERY FIX/DISCOVERY/LEARNING - create memory file:\n`;
+        output += `# .agent-context/memory/{YYYY-MM-DD}_{type}_{short-id}.json\n`;
+        output += `\`\`\`\n\n`;
+      } else {
+        output += `\`\`\`bash\n`;
+        output += `# AFTER EVERY SIGNIFICANT ACTION - update short-term memory:\n`;
+        output += `sqlite3 ./agents/data/memory/short_term.db \\\n`;
+        output += `  "INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'What you did and the result');"\n\n`;
+        output += `# AFTER EVERY FIX/DISCOVERY/LEARNING - update long-term memory:\n`;
+        output += `agent-context memory store lesson "What you learned" --tags tag1,tag2 --importance 7\n`;
+        output += `\`\`\`\n\n`;
+      }
+      output += `**MUST store memories for:**\n\n`;
+      output += `- ✅ Every bug fix (root cause + solution)\n`;
+      output += `- ✅ Every infrastructure change\n`;
+      output += `- ✅ Every architecture decision\n`;
+      output += `- ✅ Every gotcha or workaround discovered\n`;
+      output += `- ✅ Every performance optimization\n`;
+      output += `- ✅ Every deployment issue and resolution\n`;
+      output += `- ✅ Every API behavior discovery\n\n`;
+      output += `**Importance scale:**\n\n`;
+      output += `- 9-10: Critical system knowledge (will break things if forgotten)\n`;
+      output += `- 7-8: Important patterns and fixes\n`;
+      output += `- 5-6: Useful context and learnings\n`;
+      output += `- 3-4: Minor observations\n\n`;
+
+      output += `### 3. SKILLS REQUIREMENT (CHECK BEFORE IMPLEMENTING)\n\n`;
+      output += `**Before starting ANY implementation, check if a skill applies:**\n\n`;
+      output += `| Task Type | Required Skill |\n`;
+      output += `|-----------|---------------|\n`;
+      output += `| UI/Design work (buttons, modals, colors, layouts) | \`design-expert\` |\n`;
+      output += `| React/TypeScript/Frontend | \`senior-frontend\` |\n`;
+      output += `| Code review | \`code-reviewer\` |\n`;
+      output += `| Web testing | \`webapp-testing\` |\n\n`;
       output += `\`\`\`bash\n`;
-      output += `# Store learnings after: fixes, discoveries, architecture decisions, gotchas\n`;
-      output += `agent-context memory store lesson "What you learned" --tags tag1,tag2 --importance 7\n`;
+      output += `# Invoke skill FIRST, then follow its guidance\n`;
+      output += `Skill(skill: "design-expert")\n`;
       output += `\`\`\`\n\n`;
-      output += `**Must store memories for:**\n`;
-      output += `- Infrastructure changes (cost savings, scaling decisions, fixes)\n`;
-      output += `- Bug fixes and their root causes\n`;
-      output += `- Architecture decisions and rationale\n`;
-      output += `- Gotchas and workarounds discovered\n`;
-      output += `- Performance optimizations\n\n`;
-      
-      output += `### 3. TODO LIST REQUIREMENT\n\n`;
+
+      output += `### 4. TODO LIST REQUIREMENT\n\n`;
       output += `- Create todo list for multi-step tasks (3+ steps)\n`;
       output += `- Update status IMMEDIATELY after completing each item\n`;
-      output += `- Never let todos go stale (update every 5-10 tool calls)\n\n`;
-      
-      output += `### 4. VERIFICATION BEFORE COMPLETION\n\n`;
-      output += `- [ ] Used ${isWeb ? 'feature branch' : 'worktree'} for code changes? (or explain why not applicable)\n`;
-      output += `- [ ] Stored significant learnings in memory?\n`;
-      output += `- [ ] Updated/completed todo list?\n`;
-      output += `- [ ] Created PR instead of direct commit?\n\n`;
+      output += `- Never let todos go stale (update every 5-10 tool calls)\n`;
+      output += `- Use TodoWrite tool, not manual tracking\n\n`;
+
+      output += `### 5. VERIFICATION BEFORE EVERY RESPONSE\n\n`;
+      output += `Before sending ANY response, verify:\n\n`;
+      output += `\`\`\`\n`;
+      output += `┌─────────────────────────────────────────────────────────────┐\n`;
+      output += `│ CHECKLIST - Complete before responding:                     │\n`;
+      output += `├─────────────────────────────────────────────────────────────┤\n`;
+      output += `│ [ ] Read memory at start of task?                           │\n`;
+      output += `│ [ ] Checked for applicable skills?                          │\n`;
+      output += `│ [ ] Used ${isWeb ? 'feature branch' : 'worktree'} for code changes?                         │\n`;
+      output += `│ [ ] Updated short-term memory after actions?                │\n`;
+      output += `│ [ ] Stored learnings in long-term memory?                   │\n`;
+      output += `│ [ ] Updated todo list status?                               │\n`;
+      output += `│ [ ] Created PR (not direct commit)?                         │\n`;
+      output += `└─────────────────────────────────────────────────────────────┘\n`;
+      output += `\`\`\`\n\n`;
       output += `---\n\n`;
 
-      // Memory System - both platforms
+      // Memory System - EXACT structure from template
       output += `## MEMORY SYSTEM\n\n`;
-      output += `> **CRITICAL**: Memory updates are MANDATORY, not optional. Every significant discovery, fix, or lesson learned MUST be stored before completing a task.\n\n`;
       
       if (isWeb) {
         output += `### Short-term Memory (localStorage)\n\n`;
-        output += `You have access to browser localStorage for maintaining context across messages.\n\n`;
         output += `Key: \`agent_context_${projectName}\`\n\n`;
-        output += `Structure:\n\`\`\`json\n{\n  "memories": [\n    {"timestamp": "ISO8601", "type": "action|observation|thought|goal", "content": "..."}\n  ],\n  "maxEntries": 50\n}\n\`\`\`\n\n`;
+        output += `Structure:\n`;
+        output += `\`\`\`json\n`;
+        output += `{\n`;
+        output += `  "memories": [\n`;
+        output += `    {"timestamp": "ISO8601", "type": "action|observation|thought|goal", "content": "..."}\n`;
+        output += `  ],\n`;
+        output += `  "maxEntries": 50\n`;
+        output += `}\n`;
+        output += `\`\`\`\n\n`;
         output += `**BEFORE EACH DECISION**: Review recent memories for context\n`;
         output += `**AFTER EACH ACTION**: Add a memory describing what you did and the outcome\n\n`;
-        output += `### Long-term Memory (GitHub: \`.agent-context/memory/\`)\n\n`;
-        output += `Memories stored as JSON files in the project repository under \`.agent-context/memory/\`\n\n`;
+        output += `Maintains last 50 entries - older entries should be pruned.\n\n`;
+        output += `### Long-term Memory (Repository: \`.agent-context/memory/\`)\n\n`;
+        output += `Memories stored as JSON files in the project repository.\n\n`;
         output += `File format: \`{YYYY-MM-DD}_{type}_{short-id}.json\`\n`;
-        output += `\`\`\`json\n{\n  "id": "uuid",\n  "timestamp": "ISO8601",\n  "type": "fact|lesson|skill|discovery|preference",\n  "content": "Learning or discovery",\n  "tags": ["tag1", "tag2"],\n  "importance": 8\n}\n\`\`\`\n\n`;
-        output += `Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`\n\n`;
-        output += `### MANDATORY Memory Triggers\n\n`;
-        output += `**ALWAYS store to long-term memory when you:**\n`;
-        output += `1. Fix a bug or resolve an error (lesson)\n`;
-        output += `2. Discover how a system/component works (discovery)\n`;
-        output += `3. Learn a configuration requirement (fact)\n`;
-        output += `4. Find a successful approach to a problem (skill)\n`;
-        output += `5. Identify a coding pattern or convention (preference)\n`;
-        output += `6. Complete infrastructure changes (fact)\n`;
-        output += `7. Debug authentication/networking issues (lesson)\n\n`;
-        output += `**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.\n\n`;
-        output += `When you discover something significant, recommend the user commit a memory file to \`.agent-context/memory/\`.\n\n`;
+        output += `\`\`\`json\n`;
+        output += `{\n`;
+        output += `  "id": "uuid",\n`;
+        output += `  "timestamp": "ISO8601",\n`;
+        output += `  "type": "fact|lesson|skill|discovery|preference",\n`;
+        output += `  "content": "Learning or discovery",\n`;
+        output += `  "tags": ["tag1", "tag2"],\n`;
+        output += `  "importance": 8\n`;
+        output += `}\n`;
+        output += `\`\`\`\n\n`;
+      } else {
+        output += `### Short-term Memory (SQLite: \`./agents/data/memory/short_term.db\`)\n\n`;
+        output += `Table: \`memories\`\n\n`;
+        output += `- \`id\`: INTEGER PRIMARY KEY\n`;
+        output += `- \`timestamp\`: TEXT (ISO8601)\n`;
+        output += `- \`type\`: TEXT (action|observation|thought|goal)\n`;
+        output += `- \`content\`: TEXT\n\n`;
+        output += `**BEFORE EACH DECISION**: Query recent entries (last 50) to understand your context\n\n`;
+        output += `\`\`\`sql\n`;
+        output += `SELECT * FROM memories ORDER BY id DESC LIMIT 50;\n`;
+        output += `\`\`\`\n\n`;
+        output += `**AFTER EACH ACTION**: INSERT a new row describing what you did and the outcome\n\n`;
+        output += `\`\`\`sql\n`;
+        output += `INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description of action and result');\n`;
+        output += `\`\`\`\n\n`;
+        output += `Maintains last 50 entries - older entries auto-deleted via trigger.\n\n`;
+        output += `### Long-term Memory (Qdrant: \`localhost:6333\`, collection: \`agent_memory\`)\n\n`;
+        output += `**Start services**: \`agent-context memory start\`\n\n`;
+        output += `Vector schema:\n\n`;
+        output += `- \`id\`: UUID\n`;
+        output += `- \`vector\`: 384-dim embedding (all-MiniLM-L6-v2)\n`;
+        output += `- \`payload\`: {type, tags[], content, importance (1-10), timestamp}\n\n`;
+        output += `**Query memories** (semantic search):\n\n`;
+        output += `\`\`\`bash\n`;
+        output += `agent-context memory query "search terms"\n`;
+        output += `\`\`\`\n\n`;
+        output += `**Store new memory**:\n\n`;
+        output += `\`\`\`bash\n`;
+        output += `agent-context memory store lesson "What you learned" --tags tag1,tag2 --importance 8\n`;
+        output += `\`\`\`\n\n`;
+      }
+      output += `**WHEN TO READ**: Search for memories relevant to current task/decision\n`;
+      output += `**WHEN TO WRITE**: Only store significant learnings:\n\n`;
+      output += `- Discoveries about your environment/capabilities\n`;
+      output += `- Successful strategies that worked\n`;
+      output += `- Failed approaches to avoid repeating\n`;
+      output += `- Important facts learned\n`;
+      output += `- Skills or tools mastered\n\n`;
+
+      if (!isWeb) {
+        output += `### Agent Services Setup\n\n`;
+        output += `\`\`\`bash\n`;
+        output += `# Start services (auto-creates collection and migrates memories)\n`;
+        output += `agent-context memory start\n\n`;
+        output += `# Check status\n`;
+        output += `agent-context memory status\n\n`;
+        output += `# Stop services\n`;
+        output += `agent-context memory stop\n`;
+        output += `\`\`\`\n\n`;
+      }
+      output += `---\n\n`;
+
+      // Browser usage
+      if (!isWeb && includeBrowser) {
+        output += `## BROWSER USAGE\n\n`;
+        output += `When using browser automation (Playwright, Puppeteer, or any browser tool):\n\n`;
+        output += `- ALWAYS save a screenshot after EVERY browser action (click, type, navigate, scroll, etc.)\n`;
+        output += `- Save screenshots to: \`agents/data/screenshots/\`\n`;
+        output += `- Filename format: \`{timestamp}_{action}.png\` (e.g., \`1703180400_click_button.png\`)\n`;
+        output += `- Also save a \`.meta\` file with the same name containing:\n`;
+        output += `  \`\`\`\n`;
+        output += `  url: {current_url}\n`;
+        output += `  title: {page_title}\n`;
+        output += `  action: {what_you_did}\n`;
+        output += `  \`\`\`\n`;
+        output += `- Take a screenshot BEFORE and AFTER any significant visual change\n\n`;
         output += `---\n\n`;
-        
-        // Decision Loop for web
-        output += `## DECISION LOOP\n\n`;
-        output += `1. **READ** short-term memory (recent context)\n`;
-        output += `2. **QUERY** long-term memory (semantic search for relevant learnings)\n`;
-        output += `3. **THINK** about what to do next\n`;
-        output += `4. **ACT** - execute your decision\n`;
-        output += `5. **RECORD** - write to short-term memory\n`;
-        output += `6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)\n\n`;
-        output += `**Task Completion Checklist:**\n`;
-        output += `- [ ] Short-term memory updated with action outcome\n`;
-        output += `- [ ] Long-term memory updated with any lessons/discoveries/facts learned\n`;
-        output += `- [ ] Tests pass (if code changes)\n`;
-        output += `- [ ] Documentation updated (if applicable)\n\n`;
-        output += `---\n\n`;
-        
-        // Workflow for web
-        output += `**MANDATORY WORKFLOW REQUIREMENTS**:\n\n`;
+      }
+
+      // Decision Loop summary
+      output += `## DECISION LOOP\n\n`;
+      output += `1. **READ** short-term memory (recent context)\n`;
+      output += `2. **QUERY** long-term memory (semantic search for relevant past learnings)\n`;
+      output += `3. **THINK** about what to do next\n`;
+      output += `4. **ACT** - execute your decision\n`;
+      output += `5. **RECORD** - write to short-term memory\n`;
+      if (!isWeb && includeBrowser) {
+        output += `6. **IF BROWSER ACTION**: Save screenshot to \`/agents/data/screenshots/\`\n`;
+        output += `7. **OPTIONALLY** - if significant learning, add to long-term memory\n\n`;
+      } else {
+        output += `6. **OPTIONALLY** - if significant learning, add to long-term memory\n\n`;
+      }
+      output += `---\n\n`;
+
+      // Skills section
+      output += `## SKILLS\n\n`;
+      output += `You have access to reusable skills. Before attempting complex tasks:\n\n`;
+      output += `1. Check if a skill exists for it (see \`.factory/skills/\`)\n`;
+      output += `2. Follow the skill's patterns - they're tested and reliable\n`;
+      output += `3. If you discover a better approach, consider creating/updating a skill\n\n`;
+      output += `Available skills are auto-discovered. When you see a SKILL.md, follow its instructions.\n\n`;
+      output += `---\n\n`;
+
+      // Workflow requirements
+      output += `**MANDATORY WORKFLOW REQUIREMENTS**:\n\n`;
+      if (isWeb) {
         output += `1. **Feature Branches**: ALL code changes MUST use isolated feature branches (\`feature/description\`)\n`;
         output += `2. **PR-Based Merges**: NO direct commits to \`main\`. All changes via PR\n`;
         output += `3. **Code Review**: PRs should be reviewed before merge\n\n`;
-        output += `---\n\n`;
-        output += `## Required Workflow (MANDATORY)\n\n`;
-        output += `### Git Branch Workflow (ALL Changes)\n\n`;
-        output += `**Every code change MUST follow this workflow:**\n\n`;
-        output += `\`\`\`\n`;
-        output += `1. CREATE BRANCH\n   git checkout -b feature/<description>\n   → Creates isolated feature branch\n\n`;
-        output += `2. DEVELOP\n   → Make changes, commit locally\n   → Keep commits atomic and well-described\n\n`;
-        output += `3. CREATE PR\n   git push -u origin feature/<description>\n   → Push to remote\n   → Create PR via GitHub/GitLab UI\n\n`;
-        output += `4. CODE REVIEW\n   → Request review from team members\n   → Address feedback\n\n`;
-        output += `5. MERGE & CLEANUP\n   → Merge PR after approval\n   → Delete feature branch\n`;
-        output += `\`\`\`\n\n`;
-        output += `---\n\n`;
+      } else {
+        output += `1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (\`feature/NNN-slug\` branches)\n`;
+        output += `2. **PR-Based Merges**: NO direct commits to \`main\`. All changes via PR with automated review\n`;
+        output += `3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed\n`;
+        output += `4. **Automated Review**: PRs require signoff from reviewer agents before merge\n\n`;
       }
-
-      // Desktop-only sections
-      if (!isWeb) {
-        if (includeMemory) {
-          output += `### Short-term Memory (SQLite: \`./agents/data/memory/short_term.db\`)\n\n`;
-          output += `Table: \`memories\`\n`;
-          output += `- \`id\`: INTEGER PRIMARY KEY\n`;
-          output += `- \`timestamp\`: TEXT (ISO8601)\n`;
-          output += `- \`type\`: TEXT (action|observation|thought|goal)\n`;
-          output += `- \`content\`: TEXT\n\n`;
-          output += `**BEFORE EACH DECISION**: Query recent entries (last 50) to understand context:\n`;
-          output += `\`\`\`sql\nSELECT * FROM memories ORDER BY id DESC LIMIT 50;\n\`\`\`\n\n`;
-          output += `**AFTER EACH ACTION**: Record what you did and the outcome:\n`;
-          output += `\`\`\`sql\nINSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description...');\n\`\`\`\n\n`;
-          output += `### Long-term Memory (Qdrant: \`localhost:6333\`, collection: \`agent_memory\`)\n\n`;
-          output += `**Start services**: \`agent-context memory start\`\n\n`;
-          output += `Vector schema:\n`;
-          output += `- \`id\`: UUID\n`;
-          output += `- \`vector\`: 384-dim embedding (all-MiniLM-L6-v2)\n`;
-          output += `- \`payload\`: {type, tags[], content, importance (1-10), timestamp}\n\n`;
-          output += `**Query memories** (semantic search):\n`;
-          output += `\`\`\`bash\nagent-context memory query "search term"\n\`\`\`\n\n`;
-          output += `**Store new memory** (MANDATORY for significant learnings):\n`;
-          output += `\`\`\`bash\nagent-context memory store <type> "content" --tags tag1,tag2 --importance N\n\`\`\`\n\n`;
-          output += `Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`\n\n`;
-          output += `### MANDATORY Memory Triggers\n\n`;
-          output += `**ALWAYS store to long-term memory when you:**\n`;
-          output += `1. Fix a bug or resolve an error (lesson)\n`;
-          output += `2. Discover how a system/component works (discovery)\n`;
-          output += `3. Learn a configuration requirement (fact)\n`;
-          output += `4. Find a successful approach to a problem (skill)\n`;
-          output += `5. Identify a coding pattern or convention (preference)\n`;
-          output += `6. Complete infrastructure changes (fact)\n`;
-          output += `7. Debug authentication/networking issues (lesson)\n\n`;
-          output += `**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.\n\n`;
-          output += `### Agent Services Setup\n\n`;
-          output += `\`\`\`bash\n# Start services (auto-creates collection and migrates memories)\nagent-context memory start\n\n# Check status\nagent-context memory status\n\n# Stop services\nagent-context memory stop\n\`\`\`\n\n`;
-          output += `---\n\n`;
-        }
-
-        if (includeBrowser) {
-          output += `## BROWSER USAGE\n\n`;
-          output += `When using browser automation:\n\n`;
-          output += `- ALWAYS save a screenshot after EVERY browser action\n`;
-          output += `- Save screenshots to: \`agents/data/screenshots/\`\n`;
-          output += `- Filename format: \`{timestamp}_{action}.png\`\n\n`;
-          output += `---\n\n`;
-        }
-
-        if (includeDecision) {
-          output += `## DECISION LOOP\n\n`;
-          output += `1. **READ** short-term memory (recent context)\n`;
-          output += `2. **QUERY** long-term memory (semantic search for relevant learnings)\n`;
-          output += `3. **THINK** about what to do next\n`;
-          output += `4. **ACT** - execute your decision\n`;
-          output += `5. **RECORD** - write to short-term memory\n`;
-          output += `6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)\n`;
-          output += `7. **IF BROWSER ACTION**: Save screenshot to \`/agents/data/screenshots/\`\n\n`;
-          output += `**Task Completion Checklist:**\n`;
-          output += `- [ ] Short-term memory updated with action outcome\n`;
-          output += `- [ ] Long-term memory updated with any lessons/discoveries/facts learned\n`;
-          output += `- [ ] Tests pass (if code changes)\n`;
-          output += `- [ ] Documentation updated (if applicable)\n\n`;
-          output += `---\n\n`;
-        }
-
-        if (includeWorktree) {
-          output += `**MANDATORY WORKFLOW REQUIREMENTS**:\n\n`;
-          output += `1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (\`feature/NNN-slug\` branches)\n`;
-          output += `2. **PR-Based Merges**: NO direct commits to \`main\`. All changes via PR with automated review\n`;
-          output += `3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed\n`;
-          output += `4. **Automated Review**: PRs require signoff from reviewer agents before merge\n\n`;
-          output += `---\n\n`;
-          output += `## Required Workflow (MANDATORY)\n\n`;
-          output += `### Git Worktree Workflow (ALL Changes)\n\n`;
-          output += `**Every code change MUST follow this workflow:**\n\n`;
-          output += `\`\`\`\n`;
-          output += `1. CREATE WORKTREE\n   agent-context worktree create <slug>\n   → Creates feature/NNN-slug branch in .worktrees/NNN-slug/\n\n`;
-          output += `2. DEVELOP\n   cd .worktrees/NNN-slug/\n   → Make changes, commit locally\n\n`;
-          output += `3. CREATE PR (runs tests + triggers reviewers)\n   agent-context worktree pr <id>\n   → Runs all offline tests (blocks if fail)\n   → Pushes to origin\n   → Creates PR with auto-generated description\n   → Triggers reviewer agents\n\n`;
-          output += `4. AUTOMATED REVIEW\n   → Reviewer agents run in parallel (quality, security, performance, tests)\n   → PR labeled: reviewer-approved OR needs-work\n   → Auto-merge on approval\n\n`;
-          output += `5. CLEANUP\n   agent-context worktree cleanup <id>\n   → Removes worktree and deletes branch\n`;
-          output += `\`\`\`\n\n`;
-          output += `---\n\n`;
-        }
-      }
+      output += `---\n\n`;
 
       // Components
       if (componentsRaw) {
@@ -587,28 +695,92 @@
         output += `\n---\n\n`;
       }
 
-      // Commands (desktop only or summary for web)
-      if (!isWeb) {
-        output += `## Quick Reference\n\n`;
-        output += `### Essential Commands\n\n`;
-        output += `\`\`\`bash\n`;
-        output += `# Testing\n${testCmd}\n\n`;
-        output += `# Linting\n${lintCmd}\n\n`;
-        output += `# Building\n${buildCmd}\n`;
+      // Required Workflow section
+      output += `## Required Workflow (MANDATORY)\n\n`;
+      if (isWeb) {
+        output += `### Git Branch Workflow (ALL Changes)\n\n`;
+        output += `**Every code change MUST follow this workflow:**\n\n`;
+        output += `\`\`\`\n`;
+        output += `1. CREATE BRANCH\n`;
+        output += `   git checkout -b feature/<description>\n`;
+        output += `   → Creates isolated feature branch\n\n`;
+        output += `2. DEVELOP\n`;
+        output += `   → Make changes, commit locally\n`;
+        output += `   → Keep commits atomic and well-described\n\n`;
+        output += `3. CREATE PR\n`;
+        output += `   git push -u origin feature/<description>\n`;
+        output += `   → Push to remote\n`;
+        output += `   → Create PR via GitHub/GitLab UI\n\n`;
+        output += `4. CODE REVIEW\n`;
+        output += `   → Request review from team members\n`;
+        output += `   → Address feedback\n\n`;
+        output += `5. MERGE & CLEANUP\n`;
+        output += `   → Merge PR after approval\n`;
+        output += `   → Delete feature branch\n`;
         output += `\`\`\`\n\n`;
-        output += `---\n\n`;
+      } else {
+        output += `### Git Worktree Workflow (ALL Changes)\n\n`;
+        output += `**Every code change MUST follow this workflow:**\n\n`;
+        output += `\`\`\`\n`;
+        output += `1. CREATE WORKTREE\n`;
+        output += `   agent-context worktree create <slug>\n`;
+        output += `   → Creates feature/NNN-slug branch in .worktrees/NNN-slug/\n\n`;
+        output += `2. DEVELOP\n`;
+        output += `   cd .worktrees/NNN-slug/\n`;
+        output += `   → Make changes, commit locally\n\n`;
+        output += `3. CREATE PR (runs tests + triggers reviewers)\n`;
+        output += `   agent-context worktree pr <id>\n`;
+        output += `   → Runs all offline tests (blocks if fail)\n`;
+        output += `   → Pushes to origin\n`;
+        output += `   → Creates PR with auto-generated description\n`;
+        output += `   → Triggers reviewer agents\n\n`;
+        output += `4. AUTOMATED REVIEW\n`;
+        output += `   → Reviewer agents run in parallel (quality, security, performance, tests)\n`;
+        output += `   → PR labeled: reviewer-approved OR needs-work\n`;
+        output += `   → Auto-merge on approval\n\n`;
+        output += `5. CLEANUP\n`;
+        output += `   agent-context worktree cleanup <id>\n`;
+        output += `   → Removes worktree and deletes branch\n`;
+        output += `\`\`\`\n\n`;
       }
+
+      // For Code Changes
+      output += `### For Code Changes\n\n`;
+      output += `1. **Create ${isWeb ? 'branch' : 'worktree'}**: ${isWeb ? '`git checkout -b feature/<slug>`' : '`agent-context worktree create <slug>`'}\n`;
+      output += `2. Update/create tests\n`;
+      output += `3. Run tests: \`${testCmd}\`\n`;
+      output += `4. Run linting: \`${lintCmd}\`\n`;
+      output += `5. **Create PR**: ${isWeb ? 'Push and create via UI' : '`agent-context worktree pr <id>`'}\n\n`;
+
+      output += `### Before Completing\n\n`;
+      output += `1. All tests pass\n`;
+      output += `2. PR created and reviewed\n`;
+      output += `3. Documentation updated (if applicable)\n\n`;
+      output += `---\n\n`;
+
+      // Commands (both platforms)
+      output += `## Quick Reference\n\n`;
+      output += `### Essential Commands\n\n`;
+      output += `\`\`\`bash\n`;
+      output += `# Testing\n${testCmd}\n\n`;
+      output += `# Linting\n${lintCmd}\n\n`;
+      output += `# Building\n${buildCmd}\n`;
+      output += `\`\`\`\n\n`;
+      output += `---\n\n`;
 
       // Custom sections
       if (customSections) {
         output += customSections + '\n\n---\n\n';
       }
 
-      // Completion Checklist for both platforms
+      // Completion Checklist
       output += `## Completion Checklist\n\n`;
       output += `\`\`\`\n`;
       output += `[ ] Tests updated and passing\n`;
       output += `[ ] Linting/type checking passed\n`;
+      output += `[ ] ${isWeb ? 'Feature branch' : 'Worktree'} used for changes\n`;
+      output += `[ ] PR created (not direct commit)\n`;
+      output += `[ ] Memory updated with learnings\n`;
       output += `[ ] Documentation updated\n`;
       output += `[ ] No secrets in code/commits\n`;
       output += `\`\`\`\n\n`;
