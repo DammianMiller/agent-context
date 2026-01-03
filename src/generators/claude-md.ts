@@ -1,669 +1,836 @@
 import Handlebars from 'handlebars';
+import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 import type { ProjectAnalysis, AgentContextConfig } from '../types/index.js';
+import { prepopulateMemory, type DiscoveredSkill } from '../memory/prepopulate.js';
 
 export async function generateClaudeMd(
   analysis: ProjectAnalysis,
   config: AgentContextConfig
 ): Promise<string> {
-  const template = getTemplate(config);
-  const compiled = Handlebars.compile(template);
-
-  const context = buildContext(analysis, config);
-  return compiled(context);
-}
-
-function buildContext(analysis: ProjectAnalysis, config: AgentContextConfig): Record<string, unknown> {
-  // Detect web platform by checking memory config for web database setting
+  // Determine platform mode
   const hasWebDatabase = !!config.memory?.shortTerm?.webDatabase;
   const forceDesktop = config.memory?.shortTerm?.forceDesktop;
   const isWebPlatform = hasWebDatabase && !forceDesktop;
-  const isDesktopPlatform = !isWebPlatform;
+  
+  // Use appropriate template
+  const template = isWebPlatform ? getWebTemplate() : getDesktopTemplate();
+  const compiled = Handlebars.compile(template);
 
-  // Determine long-term memory provider
-  let longTermProvider = 'qdrant';
+  // Build comprehensive context from analysis + auto-population
+  const context = await buildContext(analysis, config);
+  return compiled(context);
+}
+
+async function buildContext(
+  analysis: ProjectAnalysis,
+  config: AgentContextConfig
+): Promise<Record<string, unknown>> {
+  const cwd = process.cwd();
+  
+  // Detect web vs desktop
+  const hasWebDatabase = !!config.memory?.shortTerm?.webDatabase;
+  const forceDesktop = config.memory?.shortTerm?.forceDesktop;
+  const isWebPlatform = hasWebDatabase && !forceDesktop;
+
+  // Long-term memory config
+  let longTermBackend = 'Qdrant';
   let longTermEndpoint = config.memory?.longTerm?.endpoint || 'localhost:6333';
-  let longTermCollection = config.memory?.longTerm?.collection || 'agent_memory';
+  const longTermCollection = config.memory?.longTerm?.collection || 'agent_memory';
   
   if (config.memory?.longTerm?.provider === 'github') {
-    longTermProvider = 'github';
+    longTermBackend = 'GitHub';
     longTermEndpoint = `${config.memory?.longTerm?.github?.repo || 'owner/repo'}/${config.memory?.longTerm?.github?.path || '.uam/memory'}`;
   } else if (config.memory?.longTerm?.provider === 'qdrant-cloud') {
-    longTermProvider = 'qdrant-cloud';
+    longTermBackend = 'Qdrant Cloud';
     longTermEndpoint = config.memory?.longTerm?.qdrantCloud?.url || 'https://xxxxxx.aws.cloud.qdrant.io:6333';
   }
 
-  // GitHub repo info for web memory
-  const githubRepo = config.memory?.longTerm?.github?.repo || '';
-  const githubMemoryPath = config.memory?.longTerm?.github?.path || '.uam/memory';
+  // Prepopulate memory from project
+  let prepopulated: Awaited<ReturnType<typeof prepopulateMemory>> | null = null;
+  try {
+    prepopulated = await prepopulateMemory(cwd, { docs: true, git: true, skills: true, limit: 200 });
+  } catch (e) {
+    console.warn('Failed to prepopulate memory:', e);
+  }
+
+  // Build repository structure
+  const repoStructure = buildRepositoryStructure(cwd, analysis);
+  
+  // Discover skills, droids, commands
+  const discoveredSkills = prepopulated?.skills || [];
+  const skills = discoveredSkills.filter(s => s.type === 'skill');
+  const droids = discoveredSkills.filter(s => s.type === 'droid');
+  // Commands discovered from prepopulate (unused currently but kept for reference)
+  // const commands = discoveredSkills.filter(s => s.type === 'command');
+
+  // Build skill mappings table
+  const skillMappings = buildSkillMappings(skills);
+  
+  // Build language droids table
+  const languageDroids = buildLanguageDroidsTable(droids, analysis.languages);
+  
+  // Build discovered skills table
+  const discoveredSkillsTable = buildDiscoveredSkillsTable(skills);
+
+  // Extract troubleshooting from git history
+  const troubleshooting = buildTroubleshootingSection(prepopulated?.longTerm || []);
+  
+  // Build architecture overview
+  const architectureOverview = buildArchitectureOverview(analysis);
+  
+  // Build core components section
+  const coreComponents = buildCoreComponentsSection(analysis);
+  
+  // Build key config files
+  const keyConfigFiles = buildKeyConfigFiles(analysis);
+
+  // Build essential commands
+  const essentialCommands = buildEssentialCommands(analysis);
+
+  // Build prepopulated knowledge section
+  const prepopulatedKnowledge = buildPrepopulatedKnowledge(prepopulated);
+
+  // Build cluster contexts
+  const clusterContexts = buildClusterContexts(analysis);
+
+  // Build project URLs
+  const projectUrls = buildProjectUrls(analysis);
+
+  // Build key workflows
+  const keyWorkflows = buildKeyWorkflows(analysis);
+
+  // Build infrastructure workflow
+  const infraWorkflow = buildInfraWorkflow(analysis);
+
+  // Build MCP plugins
+  const mcpPlugins = buildMcpPlugins(cwd);
+
+  // Build primary skills for decision loop
+  const primarySkills = buildPrimarySkills(skills);
+
+  // Build language examples
+  const languageExamples = buildLanguageExamples(analysis.languages);
 
   return {
+    // Project basics
     PROJECT_NAME: analysis.projectName || config.project.name,
     DESCRIPTION: analysis.description || config.project.description || '',
     DEFAULT_BRANCH: analysis.defaultBranch || config.project.defaultBranch || 'main',
-
-    // Platform detection
-    IS_WEB_PLATFORM: isWebPlatform,
-    IS_DESKTOP_PLATFORM: isDesktopPlatform,
-
+    
     // Issue tracker
-    HAS_ISSUE_TRACKER: !!analysis.issueTracker,
-    ISSUE_TRACKER_NAME: analysis.issueTracker?.name || 'GitHub Issues',
-    ISSUE_TRACKER_URL: analysis.issueTracker?.url || '',
+    ISSUE_TRACKER: analysis.issueTracker ? 
+      `Use [${analysis.issueTracker.name}](${analysis.issueTracker.url || '#'}) for issue tracking.` : 
+      null,
 
-    // Memory config - ALWAYS shown, differs by platform
-    SHORT_TERM_PATH: config.memory?.shortTerm?.path || './agents/data/memory/short_term.db',
-    SHORT_TERM_MAX_ENTRIES: config.memory?.shortTerm?.maxEntries || 50,
-    LONG_TERM_PROVIDER: longTermProvider,
+    // Memory config
+    MEMORY_DB_PATH: config.memory?.shortTerm?.path || 'agents/data/memory/short_term.db',
+    MEMORY_QUERY_CMD: 'uam memory query',
+    MEMORY_STORE_CMD: 'uam memory store',
+    MEMORY_START_CMD: 'uam memory start',
+    MEMORY_STATUS_CMD: 'uam memory status',
+    MEMORY_STOP_CMD: 'uam memory stop',
+    SHORT_TERM_LIMIT: config.memory?.shortTerm?.maxEntries || 50,
+    LONG_TERM_BACKEND: longTermBackend,
     LONG_TERM_ENDPOINT: longTermEndpoint,
     LONG_TERM_COLLECTION: longTermCollection,
-    GITHUB_REPO: githubRepo,
-    GITHUB_MEMORY_PATH: githubMemoryPath,
-    HAS_GITHUB_MEMORY: !!githubRepo,
+    SCREENSHOTS_PATH: 'agents/data/screenshots',
+    DOCKER_COMPOSE_PATH: existsSync(join(cwd, 'agents/docker-compose.yml')) ? 'agents/docker-compose.yml' :
+                         existsSync(join(cwd, 'docker-compose.yml')) ? 'docker-compose.yml' : null,
 
-    // Worktree config - ALWAYS enabled for desktop
+    // Worktree config
     WORKTREE_DIR: config.worktrees?.directory || '.worktrees',
-    WORKTREE_PREFIX: config.worktrees?.branchPrefix || 'feature/',
+    WORKTREE_CREATE_CMD: 'uam worktree create',
+    WORKTREE_PR_CMD: 'uam worktree pr',
+    WORKTREE_CLEANUP_CMD: 'uam worktree cleanup',
+    WORKTREE_APPLIES_TO: 'Application code, configs, workflows, documentation, CLAUDE.md itself',
+    BRANCH_PREFIX: config.worktrees?.branchPrefix || 'feature/',
 
-    // URLs
-    URLS: analysis.urls,
-    HAS_URLS: analysis.urls.length > 0,
-
-    // Clusters
-    HAS_CLUSTERS: analysis.clusters?.enabled,
-    CLUSTERS: analysis.clusters?.contexts || [],
-
-    // Components
-    COMPONENTS: analysis.components,
-    HAS_COMPONENTS: analysis.components.length > 0,
+    // Paths
+    SKILLS_PATH: '.factory/skills/',
+    DROIDS_PATH: '.factory/droids/',
+    COMMANDS_PATH: '.factory/commands/',
+    DOCS_PATH: analysis.directories.docs[0] || 'docs',
+    FIXES_PATH: existsSync(join(cwd, 'docs/fixes')) ? 'docs/fixes/' : null,
+    CHANGELOG_PATH: existsSync(join(cwd, 'docs/changelog')) ? 'docs/changelog' : null,
+    CHANGELOG_TEMPLATE: existsSync(join(cwd, 'docs/changelog/CHANGELOG_TEMPLATE.md')) ? 'docs/changelog/CHANGELOG_TEMPLATE.md' : null,
+    WORKFLOW_DOCS_PATH: existsSync(join(cwd, 'docs/workflows/GIT_WORKTREE_WORKFLOW.md')) ? 'docs/workflows/GIT_WORKTREE_WORKFLOW.md' : null,
 
     // Commands
     TEST_COMMAND: analysis.commands.test || 'npm test',
     LINT_COMMAND: analysis.commands.lint || 'npm run lint',
     BUILD_COMMAND: analysis.commands.build || 'npm run build',
+    HOOKS_INSTALL_CMD: existsSync(join(cwd, '.factory/scripts/install-hooks.sh')) ? '.factory/scripts/install-hooks.sh' : null,
+
+    // Skills and droids
+    PRIMARY_SKILLS: primarySkills,
+    SKILL_MAPPINGS: skillMappings,
+    DISCOVERED_SKILLS: discoveredSkillsTable,
+    LANGUAGE_DROIDS: languageDroids,
+    LANGUAGE_EXAMPLES: languageExamples,
+
+    // Repository structure
+    '@REPOSITORY_STRUCTURE': repoStructure,
+    STRUCTURE_DATE: new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+
+    // Path migrations (if detected from git history)
+    PATH_MIGRATIONS: null, // TODO: detect from git mv history
+
+    // Clusters and URLs
+    CLUSTER_CONTEXTS: clusterContexts,
+    PROJECT_URLS: projectUrls,
+    KEY_WORKFLOWS: keyWorkflows,
+    ESSENTIAL_COMMANDS: essentialCommands,
+
+    // Architecture
+    ARCHITECTURE_OVERVIEW: architectureOverview,
+    DATABASE_ARCHITECTURE: analysis.databases.length > 0 ? buildDatabaseArchitecture(analysis) : null,
+    
+    // Core components
+    CORE_COMPONENTS: coreComponents,
+
+    // Auth flow
+    AUTH_FLOW: analysis.authentication ? buildAuthFlow(analysis) : null,
+
+    // Gateway knowledge
+    GATEWAY_KNOWLEDGE: null, // Project-specific, detected from k8s/istio files
+
+    // Multi-environment
+    MULTI_ENV_CONFIG: null, // Project-specific
 
     // Infrastructure
-    INFRA_PATH: analysis.directories.infrastructure[0] || 'infra/',
-    HAS_TERRAFORM: analysis.infrastructure.iac === 'Terraform',
-    HAS_KUBERNETES: analysis.infrastructure.containerOrchestration === 'Kubernetes',
-
-    // Databases
-    DATABASES: analysis.databases,
-    HAS_DATABASES: analysis.databases.length > 0,
-
-    // Auth
-    HAS_AUTH: !!analysis.authentication,
-    AUTH_PROVIDER: analysis.authentication?.provider,
-    AUTH_DESCRIPTION: analysis.authentication?.description,
-
-    // CI/CD
-    HAS_CICD: !!analysis.ciCd,
-    CICD_PLATFORM: analysis.ciCd?.platform,
-    WORKFLOWS: analysis.ciCd?.workflows || [],
-
-    // Existing agents
-    DROIDS: analysis.existingDroids,
-    HAS_DROIDS: analysis.existingDroids.length > 0,
-    SKILLS: analysis.existingSkills,
-    HAS_SKILLS: analysis.existingSkills.length > 0,
-    COMMANDS: analysis.existingCommands,
-    HAS_COMMANDS: analysis.existingCommands.length > 0,
+    HAS_INFRA: analysis.directories.infrastructure.length > 0,
+    INFRA_WORKFLOW: infraWorkflow,
+    CLUSTER_IDENTIFY: analysis.clusters?.enabled ? 'Identify which cluster(s) affected' : null,
 
     // Troubleshooting
-    TROUBLESHOOTING_HINTS: analysis.troubleshootingHints,
-    HAS_TROUBLESHOOTING: analysis.troubleshootingHints.length > 0,
+    TROUBLESHOOTING: troubleshooting,
 
-    // Key files
-    KEY_FILES: analysis.keyFiles,
-    HAS_KEY_FILES: analysis.keyFiles.length > 0,
+    // Key config files
+    KEY_CONFIG_FILES: keyConfigFiles,
 
-    // Security
-    SECURITY_NOTES: analysis.securityNotes,
-    HAS_SECURITY_NOTES: analysis.securityNotes.length > 0,
+    // MCP plugins
+    MCP_PLUGINS: mcpPlugins,
 
-    // Languages/Frameworks
-    LANGUAGES: analysis.languages.join(', '),
-    FRAMEWORKS: analysis.frameworks.join(', '),
+    // Prepopulated knowledge
+    PREPOPULATED_KNOWLEDGE: prepopulatedKnowledge ? true : null,
+    RECENT_ACTIVITY: prepopulatedKnowledge?.recentActivity || null,
+    LEARNED_LESSONS: prepopulatedKnowledge?.learnedLessons || null,
+    KNOWN_GOTCHAS: prepopulatedKnowledge?.knownGotchas || null,
+    HOT_SPOTS: prepopulatedKnowledge?.hotSpots || null,
+
+    // Platform detection
+    IS_WEB_PLATFORM: isWebPlatform,
+    IS_DESKTOP_PLATFORM: !isWebPlatform,
   };
 }
 
-function getTemplate(_config: AgentContextConfig): string {
+function buildRepositoryStructure(cwd: string, analysis: ProjectAnalysis): string {
+  const lines: string[] = [];
+  const visited = new Set<string>();
+  
+  // Standard directories to look for
+  const standardDirs = [
+    { path: 'apps', comment: 'Deployable applications' },
+    { path: 'services', comment: 'Backend microservices' },
+    { path: 'packages', comment: 'Shared packages' },
+    { path: 'libs', comment: 'Shared libraries' },
+    { path: 'src', comment: 'Source code' },
+    { path: 'infra', comment: 'Infrastructure as Code' },
+    { path: 'infrastructure', comment: 'Infrastructure as Code' },
+    { path: 'terraform', comment: 'Terraform configurations' },
+    { path: 'k8s', comment: 'Kubernetes manifests' },
+    { path: 'helm', comment: 'Helm charts' },
+    { path: 'tools', comment: 'Development tools' },
+    { path: 'scripts', comment: 'Automation scripts' },
+    { path: 'tests', comment: 'Test suites' },
+    { path: 'test', comment: 'Test suites' },
+    { path: 'docs', comment: 'Documentation' },
+    { path: '.factory', comment: 'Factory AI configuration' },
+    { path: '.github', comment: 'GitHub configuration' },
+    { path: '.gitlab', comment: 'GitLab configuration' },
+  ];
+
+  for (const { path, comment } of standardDirs) {
+    const fullPath = join(cwd, path);
+    if (existsSync(fullPath) && statSync(fullPath).isDirectory()) {
+      visited.add(path);
+      lines.push(`├── ${path}/`.padEnd(35) + `# ${comment}`);
+      
+      // List subdirectories
+      try {
+        const subdirs = readdirSync(fullPath, { withFileTypes: true })
+          .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+          .slice(0, 8);
+        
+        for (let i = 0; i < subdirs.length; i++) {
+          const prefix = i === subdirs.length - 1 ? '│   └── ' : '│   ├── ';
+          const subComment = getSubdirComment(path, subdirs[i].name, join(fullPath, subdirs[i].name));
+          lines.push(`${prefix}${subdirs[i].name}/`.padEnd(35) + (subComment ? `# ${subComment}` : ''));
+        }
+      } catch {
+        // Ignore permission errors
+      }
+      lines.push('│');
+    }
+  }
+
+  // Add component directories from analysis
+  for (const comp of analysis.components) {
+    const dirPath = comp.path.split('/')[0];
+    if (!visited.has(dirPath) && existsSync(join(cwd, dirPath))) {
+      visited.add(dirPath);
+      lines.push(`├── ${dirPath}/`.padEnd(35) + `# ${comp.description || comp.name}`);
+    }
+  }
+
+  // Remove trailing separator
+  if (lines.length > 0 && lines[lines.length - 1] === '│') {
+    lines.pop();
+  }
+
+  return lines.join('\n');
+}
+
+function getSubdirComment(parentDir: string, subdir: string, fullPath: string): string {
+  // Check for package.json, README, etc. to get description
+  const packageJsonPath = join(fullPath, 'package.json');
+  if (existsSync(packageJsonPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      if (pkg.description) return pkg.description.slice(0, 40);
+    } catch {
+      // Ignore
+    }
+  }
+
+  // Default comments based on common patterns
+  const patterns: Record<string, Record<string, string>> = {
+    apps: {
+      api: 'REST API',
+      web: 'Web frontend',
+      mobile: 'Mobile app',
+      admin: 'Admin dashboard',
+      cms: 'CMS',
+    },
+    services: {
+      auth: 'Authentication service',
+      gateway: 'API Gateway',
+    },
+    '.factory': {
+      droids: 'Custom AI agents',
+      skills: 'Reusable skills',
+      commands: 'CLI commands',
+      scripts: 'Automation scripts',
+    },
+    '.github': {
+      workflows: 'CI/CD pipelines',
+    },
+  };
+
+  return patterns[parentDir]?.[subdir] || '';
+}
+
+function buildSkillMappings(skills: DiscoveredSkill[]): string | null {
+  if (skills.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const skill of skills) {
+    if (skill.name.includes('design') || skill.name.includes('ui')) {
+      lines.push(`| UI/Design work (buttons, modals, colors, layouts) | \`${skill.name}\` |`);
+    } else if (skill.name.includes('frontend') || skill.name.includes('react')) {
+      lines.push(`| React/TypeScript/Frontend | \`${skill.name}\` |`);
+    } else if (skill.name.includes('backend') || skill.name.includes('api')) {
+      lines.push(`| Backend/API development | \`${skill.name}\` |`);
+    }
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function buildLanguageDroidsTable(droids: DiscoveredSkill[], languages: string[]): string | null {
+  const languageDroids = droids.filter(d => 
+    d.name.includes('-pro') || 
+    d.name.includes('specialist') ||
+    languages.some(l => d.name.toLowerCase().includes(l.toLowerCase()))
+  );
+
+  if (languageDroids.length === 0 && languages.length > 0) {
+    // Generate suggested droids based on detected languages
+    const suggestions: string[] = [];
+    for (const lang of languages.slice(0, 5)) {
+      const langLower = lang.toLowerCase();
+      if (langLower.includes('typescript') || langLower.includes('javascript')) {
+        suggestions.push('| `javascript-pro` | ES6+, async patterns, Node.js, promises, event loops |');
+      } else if (langLower.includes('python')) {
+        suggestions.push('| `python-pro` | Async/await, decorators, generators, pytest, type hints |');
+      } else if (langLower.includes('c++') || langLower.includes('cpp')) {
+        suggestions.push('| `cpp-pro` | C++20 with RAII, smart pointers, STL, templates, move semantics |');
+      } else if (langLower.includes('rust')) {
+        suggestions.push('| `rust-pro` | Ownership, lifetimes, async, error handling, macros |');
+      } else if (langLower.includes('go')) {
+        suggestions.push('| `go-pro` | Concurrency, channels, interfaces, error handling |');
+      }
+    }
+    return suggestions.length > 0 ? [...new Set(suggestions)].join('\n') : null;
+  }
+
+  return languageDroids.map(d => 
+    `| \`${d.name}\` | ${d.description || `${d.platform} language specialist`} |`
+  ).join('\n') || null;
+}
+
+function buildDiscoveredSkillsTable(skills: DiscoveredSkill[]): string | null {
+  if (skills.length === 0) return null;
+
+  return skills.slice(0, 10).map(s => {
+    const purpose = s.description || `${s.platform} skill`;
+    const useWhen = s.name.includes('design') ? 'UI/design work' :
+                    s.name.includes('test') ? 'Testing and QA' :
+                    s.name.includes('review') ? 'Code review' :
+                    'Specialized tasks';
+    return `| \`${s.name}\` | ${purpose} | ${useWhen} |`;
+  }).join('\n');
+}
+
+function buildTroubleshootingSection(memories: Array<{ content: string; tags?: string[]; metadata?: Record<string, unknown> }>): string | null {
+  // Extract fix-related memories
+  const fixes = memories.filter(m => 
+    m.tags?.includes('bug-fix') || 
+    m.tags?.includes('revert') ||
+    m.content.toLowerCase().includes('fix') ||
+    m.content.toLowerCase().includes('resolved')
+  ).slice(0, 15);
+
+  if (fixes.length === 0) return null;
+
+  const lines: string[] = [];
+  for (const fix of fixes) {
+    // Extract symptom and solution from content
+    const content = fix.content;
+    let symptom = '';
+    let solution = '';
+
+    if (content.includes('Bug fixed:')) {
+      symptom = content.replace('Bug fixed:', '').split('.')[0].trim();
+      solution = content.split('.').slice(1).join('.').trim() || 'See commit for details';
+    } else if (content.includes('Failed approach')) {
+      symptom = content.split(':')[1]?.split('.')[0]?.trim() || content.slice(0, 50);
+      solution = 'Avoid this approach';
+    } else {
+      symptom = content.slice(0, 60) + (content.length > 60 ? '...' : '');
+      solution = 'See memory for details';
+    }
+
+    if (symptom) {
+      lines.push(`| ${symptom} | ${solution.slice(0, 60)} |`);
+    }
+  }
+
+  if (lines.length === 0) return null;
+
+  return `| Symptom | Solution |\n|---------|----------|\n${lines.join('\n')}`;
+}
+
+function buildArchitectureOverview(analysis: ProjectAnalysis): string | null {
+  const sections: string[] = [];
+
+  // Infrastructure overview
+  if (analysis.infrastructure.iac || analysis.infrastructure.containerOrchestration) {
+    sections.push('### Infrastructure\n');
+    if (analysis.infrastructure.iac) {
+      sections.push(`- **IaC**: ${analysis.infrastructure.iac}`);
+    }
+    if (analysis.infrastructure.containerOrchestration) {
+      sections.push(`- **Orchestration**: ${analysis.infrastructure.containerOrchestration}`);
+    }
+    if (analysis.infrastructure.cloud && analysis.infrastructure.cloud.length > 0) {
+      sections.push(`- **Cloud**: ${analysis.infrastructure.cloud.join(', ')}`);
+    }
+    sections.push('');
+  }
+
+  // Component overview
+  if (analysis.components.length > 0) {
+    sections.push('### Components\n');
+    for (const comp of analysis.components.slice(0, 8)) {
+      sections.push(`- **${comp.name}** (\`${comp.path}\`): ${comp.description || `${comp.language} ${comp.framework || 'application'}`}`);
+    }
+    sections.push('');
+  }
+
+  return sections.length > 0 ? sections.join('\n') : null;
+}
+
+function buildCoreComponentsSection(analysis: ProjectAnalysis): string | null {
+  if (analysis.components.length === 0) return null;
+
+  const sections: string[] = [];
+
+  for (const comp of analysis.components.slice(0, 6)) {
+    sections.push(`### ${comp.name} (\`${comp.path}\`)\n`);
+    sections.push(`- **Language**: ${comp.language}`);
+    if (comp.framework) {
+      sections.push(`- **Framework**: ${comp.framework}`);
+    }
+    if (comp.description) {
+      sections.push(`- ${comp.description}`);
+    }
+    sections.push('');
+  }
+
+  return sections.join('\n');
+}
+
+function buildDatabaseArchitecture(analysis: ProjectAnalysis): string {
+  const lines: string[] = [];
+  
+  for (const db of analysis.databases) {
+    lines.push(`- **${db.type}**: ${db.purpose || 'Primary database'}`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildAuthFlow(analysis: ProjectAnalysis): string {
+  if (!analysis.authentication) return '';
+
+  const sections: string[] = [];
+  sections.push(`**Provider**: ${analysis.authentication.provider}\n`);
+  
+  if (analysis.authentication.description) {
+    sections.push(analysis.authentication.description);
+  }
+
+  return sections.join('\n');
+}
+
+function buildKeyConfigFiles(analysis: ProjectAnalysis): string | null {
+  const files: Array<{ file: string; purpose: string }> = [];
+
+  // Add key files from analysis
+  for (const kf of analysis.keyFiles.slice(0, 15)) {
+    files.push({ file: kf.file, purpose: kf.purpose });
+  }
+
+  if (files.length === 0) return null;
+
+  return files.map(f => `| \`${f.file}\` | ${f.purpose} |`).join('\n');
+}
+
+function buildEssentialCommands(analysis: ProjectAnalysis): string | null {
+  const commands: string[] = [];
+
+  // Test command
+  if (analysis.commands.test && analysis.commands.test !== 'npm test') {
+    commands.push(`# Tests\n${analysis.commands.test}`);
+  }
+
+  // Lint command
+  if (analysis.commands.lint) {
+    commands.push(`# Linting\n${analysis.commands.lint}`);
+  }
+
+  // Build command
+  if (analysis.commands.build) {
+    commands.push(`# Build\n${analysis.commands.build}`);
+  }
+
+  // Infrastructure command
+  if (analysis.infrastructure.iac === 'Terraform') {
+    const infraPath = analysis.directories.infrastructure[0] || 'infra/terraform';
+    commands.push(`# Terraform\ncd ${infraPath} && terraform plan`);
+  }
+
+  return commands.length > 0 ? commands.join('\n\n') : null;
+}
+
+function buildClusterContexts(analysis: ProjectAnalysis): string | null {
+  if (!analysis.clusters?.enabled || !analysis.clusters.contexts) return null;
+
+  return analysis.clusters.contexts.map(c => 
+    `kubectl config use-context ${c.context}  # ${c.name} (${c.purpose})`
+  ).join('\n');
+}
+
+function buildProjectUrls(analysis: ProjectAnalysis): string | null {
+  if (analysis.urls.length === 0) return null;
+
+  return analysis.urls.map(u => `- **${u.name}**: ${u.value}`).join('\n');
+}
+
+function buildKeyWorkflows(analysis: ProjectAnalysis): string | null {
+  if (!analysis.ciCd?.workflows || analysis.ciCd.workflows.length === 0) return null;
+
+  return analysis.ciCd.workflows.slice(0, 10).map(w => 
+    `├── ${w.file}`.padEnd(35) + `# ${w.purpose}`
+  ).join('\n');
+}
+
+function buildInfraWorkflow(analysis: ProjectAnalysis): string | null {
+  if (analysis.directories.infrastructure.length === 0) return null;
+
+  const infraPath = analysis.directories.infrastructure[0];
+  const planCmd = analysis.infrastructure.iac === 'Terraform' ? 'terraform plan' : 
+                  analysis.infrastructure.iac === 'Pulumi' ? 'pulumi preview' : 
+                  'infrastructure plan';
+
+  return `1. **Create worktree** for infrastructure changes
+2. Update infrastructure in \`${infraPath}/\`
+3. Update CI/CD workflows in \`.github/workflows/\`
+4. Run \`${planCmd}\`
+5. Update secrets via GitHub Actions (not locally)
+6. **Create PR** with automated review`;
+}
+
+function buildMcpPlugins(cwd: string): string | null {
+  const mcpPath = join(cwd, '.mcp.json');
+  if (!existsSync(mcpPath)) return null;
+
+  try {
+    const mcp = JSON.parse(readFileSync(mcpPath, 'utf-8'));
+    if (!mcp.mcpServers && !mcp.plugins) return null;
+
+    const plugins = mcp.mcpServers || mcp.plugins || {};
+    const lines: string[] = [];
+
+    for (const [name, config] of Object.entries(plugins)) {
+      const desc = (config as Record<string, unknown>).description || 
+                   (config as Record<string, unknown>).purpose || 
+                   'MCP plugin';
+      lines.push(`| \`${name}\` | ${desc} |`);
+    }
+
+    return lines.length > 0 ? lines.join('\n') : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildPrimarySkills(skills: DiscoveredSkill[]): string | null {
+  const primary = skills.filter(s => 
+    s.name.includes('design') || 
+    s.name.includes('frontend') ||
+    s.name.includes('ui')
+  ).slice(0, 3);
+
+  if (primary.length === 0) return null;
+
+  return primary.map(s => `│     ├─ Use ${s.name} for ${s.description || 'specialized work'}                  │`).join('\n');
+}
+
+function buildLanguageExamples(languages: string[]): string | null {
+  const examples: string[] = [];
+
+  for (const lang of languages.slice(0, 3)) {
+    const langLower = lang.toLowerCase();
+    if (langLower.includes('c++') || langLower.includes('cpp')) {
+      examples.push(`# For C++ work\nTask(subagent_type: "cpp-pro", prompt: "Refactor X using RAII...")`);
+    } else if (langLower.includes('python')) {
+      examples.push(`# For Python work\nTask(subagent_type: "python-pro", prompt: "Optimize async handlers...")`);
+    } else if (langLower.includes('rust')) {
+      examples.push(`# For Rust work\nTask(subagent_type: "rust-pro", prompt: "Implement with proper lifetimes...")`);
+    }
+  }
+
+  return examples.length > 0 ? examples.join('\n\n') : null;
+}
+
+function buildPrepopulatedKnowledge(
+  prepopulated: Awaited<ReturnType<typeof prepopulateMemory>> | null
+): { recentActivity: string; learnedLessons: string; knownGotchas: string; hotSpots: string } | null {
+  if (!prepopulated) return null;
+
+  const { shortTerm, longTerm } = prepopulated;
+
+  // Recent activity from short-term
+  const recentActivity = shortTerm
+    .filter(m => m.type === 'action' || m.type === 'observation')
+    .slice(0, 10)
+    .map(m => `- ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`)
+    .join('\n');
+
+  // Learned lessons from long-term
+  const learnedLessons = longTerm
+    .filter(m => m.tags?.includes('bug-fix') || m.tags?.includes('lesson') || (m.importance && m.importance >= 7))
+    .slice(0, 10)
+    .map(m => `- **${m.tags?.slice(0, 2).join(', ') || 'General'}**: ${m.content.slice(0, 80)}...`)
+    .join('\n');
+
+  // Known gotchas (from reverts and high-importance fixes)
+  const knownGotchas = longTerm
+    .filter(m => m.tags?.includes('revert') || m.tags?.includes('failed-approach') || m.content.includes('avoid'))
+    .slice(0, 5)
+    .map(m => `- ⚠️ ${m.content.slice(0, 100)}`)
+    .join('\n');
+
+  // Hot spots
+  const hotSpotMemory = longTerm.find(m => m.id === 'git-hotspots');
+  const hotSpots = hotSpotMemory?.content || 'No hot spots detected yet.';
+
+  if (!recentActivity && !learnedLessons && !knownGotchas) {
+    return null;
+  }
+
+  return {
+    recentActivity: recentActivity || 'No recent activity recorded.',
+    learnedLessons: learnedLessons || 'No lessons recorded yet.',
+    knownGotchas: knownGotchas || 'No gotchas recorded yet.',
+    hotSpots,
+  };
+}
+
+function getDesktopTemplate(): string {
+  // Read from template file if it exists, otherwise use inline
+  const templatePath = join(process.cwd(), 'templates/CLAUDE.template.md');
+  if (existsSync(templatePath)) {
+    return readFileSync(templatePath, 'utf-8');
+  }
+
+  // Fallback inline template for desktop
   return `<coding_guidelines>
 
-# {{#if IS_WEB_PLATFORM}}AGENT.md{{else}}CLAUDE.md{{/if}} - {{PROJECT_NAME}} Development Guide
+# CLAUDE.md - {{PROJECT_NAME}} Development Guide
 
-You are Autonomous Claude, a self-directed AI agent with full control over this environment. You operate continuously, making your own decisions.
+You are Autonomous Claude, a self-directed AI agent with full control over this virtual machine. You operate continuously, making your own decisions.
+
+{{#if ISSUE_TRACKER}}
+**Note**: {{{ISSUE_TRACKER}}}
+{{/if}}
+
+---
+
+## ⚠️⚠️⚠️ CRITICAL: MANDATORY DECISION LOOP ⚠️⚠️⚠️
+
+**FOLLOW THIS FOR EVERY ACTION. NO EXCEPTIONS.**
+
+1. **READ MEMORY FIRST**
+   - Query short-term: \`sqlite3 {{MEMORY_DB_PATH}} "SELECT * FROM memories ORDER BY id DESC LIMIT 20;"\`
+   - Query long-term: \`{{MEMORY_QUERY_CMD}} "<keywords>"\`
+
+2. **CHECK SKILLS** before implementing (see \`{{SKILLS_PATH}}\`)
+
+3. **CREATE WORKTREE** for ANY code changes
+   - \`{{WORKTREE_CREATE_CMD}} <slug>\`
+   - NEVER commit directly to {{DEFAULT_BRANCH}}
+
+4. **UPDATE MEMORY** after significant actions
+   - \`{{MEMORY_STORE_CMD}} lesson "What you learned" --tags tag1,tag2 --importance 7\`
+
+---
+
+## Memory System
+
+- **Short-term**: \`{{MEMORY_DB_PATH}}\` (SQLite, last {{SHORT_TERM_LIMIT}} entries)
+- **Long-term**: {{LONG_TERM_BACKEND}} at \`{{LONG_TERM_ENDPOINT}}\`
+
+---
+
+## Repository Structure
+
+\`\`\`
+{{PROJECT_NAME}}/
+{{{@REPOSITORY_STRUCTURE}}}
+\`\`\`
+
+{{#if ARCHITECTURE_OVERVIEW}}
+## Architecture
+
+{{{ARCHITECTURE_OVERVIEW}}}
+{{/if}}
+
+{{#if CORE_COMPONENTS}}
+## Components
+
+{{{CORE_COMPONENTS}}}
+{{/if}}
+
+{{#if TROUBLESHOOTING}}
+## Troubleshooting
+
+{{{TROUBLESHOOTING}}}
+{{/if}}
+
+---
+
+## Completion Checklist
+
+- [ ] Tests pass
+- [ ] Worktree used
+- [ ] Memory updated
+- [ ] PR created (not direct commit)
+
+</coding_guidelines>
+`;
+}
+
+function getWebTemplate(): string {
+  return `<coding_guidelines>
+
+# AGENT.md - {{PROJECT_NAME}} Development Guide
+
+You are an AI agent helping with this project. Follow best practices and maintain context.
+
 {{#if DESCRIPTION}}
-
 > {{DESCRIPTION}}
 {{/if}}
 
 ---
 
-## ⛔ MANDATORY RULES - READ BEFORE ANY ACTION ⛔
+## ⛔ MANDATORY RULES
 
-**STOP! Before making ANY code/infrastructure changes, you MUST follow these rules:**
-
-{{#if IS_DESKTOP_PLATFORM}}
-### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)
-
-\`\`\`
-❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH}} branch
-✅ REQUIRED: Create worktree → Make changes → Create PR → Merge via PR
-\`\`\`
-
-**Before ANY code change:**
-
-\`\`\`bash
-# Step 1: Create worktree
-uam worktree create <descriptive-slug>
-
-# Step 2: cd into worktree and make changes
-cd {{WORKTREE_DIR}}/NNN-<slug>/
-
-# Step 3: Commit and create PR
-uam worktree pr <id>
-\`\`\`
-
-**Applies to:** All code, configs, workflows, documentation
-{{else}}
-### 1. BRANCH REQUIREMENT (NO EXCEPTIONS)
-
-\`\`\`
-❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH}} branch
-✅ REQUIRED: Create branch → Make changes → Create PR → Merge via PR
-\`\`\`
-
-**Before ANY code change:**
-
-\`\`\`bash
-git checkout -b {{WORKTREE_PREFIX}}<descriptive-slug>
-# Make changes, commit, push
-git push -u origin {{WORKTREE_PREFIX}}<descriptive-slug>
-# Create PR via UI
-\`\`\`
-{{/if}}
-
-### 2. MEMORY REQUIREMENT (AFTER SIGNIFICANT ACTIONS)
-
-\`\`\`bash
-# Store learnings after: fixes, discoveries, architecture decisions, gotchas
-uam memory store lesson "What you learned" --tags tag1,tag2 --importance 7
-\`\`\`
-
-**Must store memories for:**
-- Infrastructure changes (cost savings, scaling decisions, fixes)
-- Bug fixes and their root causes
-- Architecture decisions and rationale
-- Gotchas and workarounds discovered
-- Performance optimizations
-
-### 3. TODO LIST REQUIREMENT
-
-- Create todo list for multi-step tasks (3+ steps)
-- Update status IMMEDIATELY after completing each item
-- Never let todos go stale (update every 5-10 tool calls)
-
-### 4. VERIFICATION BEFORE COMPLETION
-
-- [ ] Used {{#if IS_DESKTOP_PLATFORM}}worktree{{else}}feature branch{{/if}} for code changes? (or explain why not applicable)
-- [ ] Stored significant learnings in memory?
-- [ ] Updated/completed todo list?
-- [ ] Created PR instead of direct commit?
+1. **BRANCH REQUIREMENT**: Never commit directly to {{DEFAULT_BRANCH}}. Use feature branches.
+2. **MEMORY**: Store significant learnings to \`.uam/memory/\`
+3. **TODO LIST**: Create todo list for multi-step tasks (3+ steps)
 
 ---
 
-## MEMORY SYSTEM
+## Memory System
 
-> **CRITICAL**: Memory updates are MANDATORY, not optional. Every significant discovery, fix, or lesson learned MUST be stored before completing a task.
-
-{{#if IS_DESKTOP_PLATFORM}}
-### Short-term Memory (SQLite: \`{{SHORT_TERM_PATH}}\`)
-
-Table: \`memories\`
-- \`id\`: INTEGER PRIMARY KEY
-- \`timestamp\`: TEXT (ISO8601)
-- \`type\`: TEXT (action|observation|thought|goal)
-- \`content\`: TEXT
-
-**BEFORE EACH DECISION**: Query recent entries (last {{SHORT_TERM_MAX_ENTRIES}}) to understand context:
-\`\`\`sql
-SELECT * FROM memories ORDER BY id DESC LIMIT {{SHORT_TERM_MAX_ENTRIES}};
-\`\`\`
-
-**AFTER EACH ACTION**: Record what you did and the outcome:
-\`\`\`sql
-INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description...');
-\`\`\`
-
-### Long-term Memory ({{LONG_TERM_PROVIDER}}: \`{{LONG_TERM_ENDPOINT}}\`, collection: \`{{LONG_TERM_COLLECTION}}\`)
-
-**Start services**: \`uam memory start\`
-
-Vector schema:
-- \`id\`: UUID
-- \`vector\`: 384-dim embedding (all-MiniLM-L6-v2)
-- \`payload\`: {type, tags[], content, importance (1-10), timestamp}
-
-**Query memories** (semantic search):
-\`\`\`bash
-uam memory query "search term"
-\`\`\`
-
-**Store new memory** (MANDATORY for significant learnings):
-\`\`\`bash
-uam memory store <type> "content" --tags tag1,tag2 --importance N
-\`\`\`
-
-Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`
-
-### MANDATORY Memory Triggers
-
-**ALWAYS store to long-term memory when you:**
-1. Fix a bug or resolve an error (lesson)
-2. Discover how a system/component works (discovery)
-3. Learn a configuration requirement (fact)
-4. Find a successful approach to a problem (skill)
-5. Identify a coding pattern or convention (preference)
-6. Complete infrastructure changes (fact)
-7. Debug authentication/networking issues (lesson)
-
-**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.
-
-### Agent Services Setup
-
-\`\`\`bash
-# Start services (auto-creates collection and migrates memories)
-uam memory start
-
-# Check status
-uam memory status
-
-# Stop services
-uam memory stop
-\`\`\`
-
-{{else}}
-### Short-term Memory (localStorage)
-
-You have access to browser localStorage for maintaining context across messages.
+### Short-term (localStorage)
 
 Key: \`agent_context_{{PROJECT_NAME}}\`
 
-Structure:
-\`\`\`json
-{
-  "memories": [
-    {"timestamp": "ISO8601", "type": "action|observation|thought|goal", "content": "..."}
-  ],
-  "maxEntries": {{SHORT_TERM_MAX_ENTRIES}}
-}
+### Long-term (GitHub: \`.uam/memory/\`)
+
+Store memories as JSON files for persistent knowledge.
+
+---
+
+## Repository Structure
+
+\`\`\`
+{{PROJECT_NAME}}/
+{{{@REPOSITORY_STRUCTURE}}}
 \`\`\`
 
-**BEFORE EACH DECISION**: Review recent memories for context
-**AFTER EACH ACTION**: Add a memory describing what you did and the outcome
+{{#if ARCHITECTURE_OVERVIEW}}
+## Architecture
 
-### Long-term Memory (GitHub: \`.uam/memory/\`)
+{{{ARCHITECTURE_OVERVIEW}}}
+{{/if}}
 
-Memories stored as JSON files in the project repository under \`.uam/memory/\`
+{{#if CORE_COMPONENTS}}
+## Components
 
-File format: \`{YYYY-MM-DD}_{type}_{short-id}.json\`
-\`\`\`json
-{
-  "id": "uuid",
-  "timestamp": "ISO8601",
-  "type": "fact|lesson|skill|discovery|preference",
-  "content": "Learning or discovery",
-  "tags": ["tag1", "tag2"],
-  "importance": 8
-}
-\`\`\`
-
-Memory types: \`fact\`, \`lesson\`, \`skill\`, \`discovery\`, \`preference\`
-
-### MANDATORY Memory Triggers
-
-**ALWAYS store to long-term memory when you:**
-1. Fix a bug or resolve an error (lesson)
-2. Discover how a system/component works (discovery)
-3. Learn a configuration requirement (fact)
-4. Find a successful approach to a problem (skill)
-5. Identify a coding pattern or convention (preference)
-6. Complete infrastructure changes (fact)
-7. Debug authentication/networking issues (lesson)
-
-**Memory storage is part of task completion.** A task is NOT complete until learnings are stored.
-
-When you discover something significant, recommend the user commit a memory file to \`.uam/memory/\`.
+{{{CORE_COMPONENTS}}}
 {{/if}}
 
 ---
 
-{{#if IS_DESKTOP_PLATFORM}}
-## BROWSER USAGE
+## Workflow
 
-When using browser automation:
-
-- ALWAYS save a screenshot after EVERY browser action
-- Save screenshots to: \`agents/data/screenshots/\`
-- Filename format: \`{timestamp}_{action}.png\`
+1. Create feature branch: \`git checkout -b {{BRANCH_PREFIX}}<description>\`
+2. Make changes, commit, push
+3. Create PR via GitHub UI
 
 ---
-
-{{/if}}
-## DECISION LOOP
-
-1. **READ** short-term memory (recent context)
-2. **QUERY** long-term memory (semantic search for relevant learnings)
-3. **THINK** about what to do next
-4. **ACT** - execute your decision
-5. **RECORD** - write to short-term memory
-6. **STORE** - add significant learnings to long-term memory (MANDATORY, not optional)
-{{#if IS_DESKTOP_PLATFORM}}
-7. **IF BROWSER ACTION**: Save screenshot to \`/agents/data/screenshots/\`
-{{/if}}
-
-**Task Completion Checklist:**
-- [ ] Short-term memory updated with action outcome
-- [ ] Long-term memory updated with any lessons/discoveries/facts learned
-- [ ] Tests pass (if code changes)
-- [ ] Documentation updated (if applicable)
-
----
-
-{{#if HAS_SKILLS}}
-## SKILLS
-
-You have access to reusable skills. Before attempting complex tasks:
-
-1. Check if a skill exists for it (see \`.factory/skills/\`)
-2. Follow the skill's patterns - they're tested and reliable
-3. If you discover a better approach, consider creating/updating a skill
-
-Available skills are auto-discovered. When you see a SKILL.md, follow its instructions.
-
-{{#each SKILLS}}
-- \`{{this}}\`
-{{/each}}
-
----
-
-{{/if}}
-**MANDATORY WORKFLOW REQUIREMENTS**:
-
-{{#if IS_DESKTOP_PLATFORM}}
-1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (\`{{WORKTREE_PREFIX}}NNN-slug\` branches)
-2. **PR-Based Merges**: NO direct commits to \`{{DEFAULT_BRANCH}}\`. All changes via PR with automated review
-3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed
-4. **Automated Review**: PRs require signoff from reviewer agents before merge
-{{else}}
-1. **Feature Branches**: ALL code changes MUST use isolated feature branches (\`{{WORKTREE_PREFIX}}description\`)
-2. **PR-Based Merges**: NO direct commits to \`{{DEFAULT_BRANCH}}\`. All changes via PR
-3. **Code Review**: PRs should be reviewed before merge
-{{/if}}
-
----
-
 
 ## Quick Reference
 
-{{#if HAS_CLUSTERS}}
-### Cluster Contexts
-
-\`\`\`bash
-{{#each CLUSTERS}}
-kubectl config use-context {{this.context}}  # {{this.name}} ({{this.purpose}})
-{{/each}}
-\`\`\`
-
-{{/if}}
-{{#if HAS_URLS}}
-### URLs
-
-{{#each URLS}}
-- **{{this.name}}**: {{this.value}}
-{{/each}}
-
-{{/if}}
-{{#if HAS_KEY_FILES}}
-### Key Files
-
-{{#each KEY_FILES}}
-- \`{{this.path}}\` - {{this.description}}
-{{/each}}
-
-{{/if}}
-{{#if IS_DESKTOP_PLATFORM}}
-### Essential Commands
-
-\`\`\`bash
-# Create worktree for new task (MANDATORY for all changes)
-uam worktree create <slug>
-
-# Testing
-{{TEST_COMMAND}}
-
-# Linting
-{{LINT_COMMAND}}
-
-# Building
-{{BUILD_COMMAND}}
-{{#if HAS_TERRAFORM}}
-
-# Terraform
-cd {{INFRA_PATH}} && terraform plan
-{{/if}}
-\`\`\`
-
-{{/if}}
----
-
-{{#if HAS_COMPONENTS}}
-## Architecture
-
-{{#each COMPONENTS}}
-### {{this.name}} (\`{{this.path}}\`)
-
-- **Language**: {{this.language}}
-{{#if this.framework}}- **Framework**: {{this.framework}}{{/if}}
-- {{this.description}}
-
-{{/each}}
----
-
-{{/if}}
-{{#if HAS_DATABASES}}
-## Data Layer
-
-{{#each DATABASES}}
-- **{{this.type}}**: {{this.purpose}}
-{{/each}}
-
----
-
-{{/if}}
-{{#if HAS_AUTH}}
-## Authentication
-
-**Provider**: {{AUTH_PROVIDER}}
-
-{{AUTH_DESCRIPTION}}
-
----
-
-{{/if}}
-{{#if IS_DESKTOP_PLATFORM}}
-{{#if HAS_CICD}}
-## CI/CD ({{CICD_PLATFORM}})
-
-| Workflow | Purpose |
-|----------|---------|
-{{#each WORKFLOWS}}
-| \`{{this.file}}\` | {{this.purpose}} |
-{{/each}}
-
----
-
-{{/if}}
-{{/if}}
-{{#if HAS_TROUBLESHOOTING}}
-## Troubleshooting
-
-| Symptom | Solution |
-|---------|----------|
-{{#each TROUBLESHOOTING_HINTS}}
-| {{this.symptom}} | {{this.solution}} |
-{{/each}}
-
----
-
-{{/if}}
-## Required Workflow (MANDATORY)
-
-{{#if IS_DESKTOP_PLATFORM}}
-### Git Worktree Workflow (ALL Changes)
-
-**Every code change MUST follow this workflow:**
-
-\`\`\`
-1. CREATE WORKTREE
-   uam worktree create <slug>
-   → Creates {{WORKTREE_PREFIX}}NNN-slug branch in {{WORKTREE_DIR}}/NNN-slug/
-
-2. DEVELOP
-   cd {{WORKTREE_DIR}}/NNN-slug/
-   → Make changes, commit locally
-
-3. CREATE PR (runs tests + triggers reviewers)
-   uam worktree pr <id>
-   → Runs all offline tests (blocks if fail)
-   → Pushes to origin
-   → Creates PR with auto-generated description
-   → Triggers reviewer agents
-
-4. AUTOMATED REVIEW
-   → Reviewer agents run in parallel (quality, security, performance, tests)
-   → PR labeled: reviewer-approved OR needs-work
-   → Auto-merge on approval
-
-5. CLEANUP
-   uam worktree cleanup <id>
-   → Removes worktree and deletes branch
-\`\`\`
-{{else}}
-### Git Branch Workflow (ALL Changes)
-
-**Every code change MUST follow this workflow:**
-
-\`\`\`
-1. CREATE BRANCH
-   git checkout -b {{WORKTREE_PREFIX}}<description>
-   → Creates isolated feature branch
-
-2. DEVELOP
-   → Make changes, commit locally
-   → Keep commits atomic and well-described
-
-3. CREATE PR
-   git push -u origin {{WORKTREE_PREFIX}}<description>
-   → Push to remote
-   → Create PR via GitHub/GitLab UI
-
-4. CODE REVIEW
-   → Request review from team members
-   → Address feedback
-
-5. MERGE & CLEANUP
-   → Merge PR after approval
-   → Delete feature branch
-\`\`\`
-{{/if}}
-
-### Before ANY Task
-
-1. Read relevant docs in \`/docs\` and component folders
-2. Check for known issues in troubleshooting section
-{{#if IS_DESKTOP_PLATFORM}}
-3. **Create a worktree for your changes**
-{{else}}
-3. **Create a feature branch for your changes**
-{{/if}}
-
-### For Code Changes
-
-{{#if IS_DESKTOP_PLATFORM}}
-1. **Create worktree**: \`uam worktree create <slug>\`
-{{else}}
-1. **Create branch**: \`git checkout -b {{WORKTREE_PREFIX}}<description>\`
-{{/if}}
-2. Update/create tests
-3. Run \`{{TEST_COMMAND}}\`
-4. Run linting and type checking
-{{#if IS_DESKTOP_PLATFORM}}
-5. **Create PR**: \`uam worktree pr <id>\`
-{{else}}
-5. **Create PR**: Push branch and open PR
-{{/if}}
-
-{{#if HAS_TERRAFORM}}
-### For Infrastructure Changes
-
-{{#if IS_DESKTOP_PLATFORM}}
-1. **Create worktree** for Terraform changes
-{{else}}
-1. **Create branch** for Terraform changes
-{{/if}}
-2. Update Terraform in \`{{INFRA_PATH}}\`
-3. Update CI/CD workflows if needed
-4. Run \`terraform plan\`
-5. Update secrets via GitHub Actions (not locally)
-6. **Create PR** with review
-
-{{/if}}
-### Before Completing
-
-1. All tests pass
-2. PR created and reviewed
-3. Update relevant documentation
-
----
-
-
-{{#if HAS_DROIDS}}
-## Augmented Agent Capabilities
-
-### Custom Droids (\`.factory/droids/\`)
-
-{{#each DROIDS}}
-- \`{{this}}\`
-{{/each}}
-
-{{#if HAS_COMMANDS}}
-### Commands (\`.factory/commands/\`)
-
-{{#each COMMANDS}}
-- \`/{{this}}\`
-{{/each}}
-{{/if}}
-
----
-
-{{/if}}
-## Completion Checklist
-
-\`\`\`
-[ ] Tests updated and passing
-[ ] Linting/type checking passed
-{{#if HAS_TERRAFORM}}
-[ ] Terraform plan verified (if infra changed)
-{{/if}}
-[ ] Documentation updated
-[ ] No secrets in code/commits
-\`\`\`
-
----
-
-**Languages**: {{LANGUAGES}}
-**Frameworks**: {{FRAMEWORKS}}
+- **Test**: \`{{TEST_COMMAND}}\`
+- **Build**: \`{{BUILD_COMMAND}}\`
+- **Lint**: \`{{LINT_COMMAND}}\`
 
 </coding_guidelines>
 `;

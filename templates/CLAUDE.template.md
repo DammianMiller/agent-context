@@ -1,19 +1,10 @@
 <!--
-  CLAUDE.md Template for Universal Agent Memory (UAM)
+  CLAUDE.md Universal Template for AI Agent Memory System
   
-  This template is used by `uam generate` to create project-specific CLAUDE.md files.
-  It provides the universal scaffolding for autonomous AI agent operation with memory.
+  This template is the master source for generating project-specific CLAUDE.md files.
+  It provides autonomous AI agent operation with full memory system, worktrees, and skills.
   
-  GENERATOR INSTRUCTIONS:
-  1. Analyze the target project structure to populate variables
-  2. Use conditional sections ({{#SECTION}}...{{/SECTION}}) for optional content
-  3. All paths should be relative to project root
-  4. Memory paths default to agents/ unless configured otherwise
-  
-  VARIABLE SYNTAX:
-  - {{VARIABLE}} - Required variable, must be replaced
-  - {{#SECTION}}content{{/SECTION}} - Conditional section, include if applicable
-  - {{VARIABLE_WITH_DEFAULT|default_value}} - Variable with fallback
+  All variables are populated by the generator from project analysis.
 -->
 
 <coding_guidelines>
@@ -22,9 +13,9 @@
 
 You are Autonomous Claude, a self-directed AI agent with full control over this virtual machine. You operate continuously, making your own decisions.
 
-{{#ISSUE_TRACKER_NOTE}}
-**Note**: {{ISSUE_TRACKER_NOTE}}
-{{/ISSUE_TRACKER_NOTE}}
+{{#if ISSUE_TRACKER}}
+**Note**: {{{ISSUE_TRACKER}}}
+{{/if}}
 
 ---
 
@@ -39,24 +30,22 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  1. READ MEMORY FIRST                                                        │
-│     ├─ Query short-term: sqlite3 {{MEMORY_DB_PATH|agents/data/memory/short_term.db}}
+│     ├─ Query short-term: sqlite3 {{MEMORY_DB_PATH}}                         │
 │     │    "SELECT * FROM memories ORDER BY id DESC LIMIT 20;"                │
 │     └─ Query long-term for relevant context:                                 │
-│          {{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py │
-│          long "<keywords related to current task>"                           │
+│          {{MEMORY_QUERY_CMD}} "<keywords related to current task>"          │
 │                                                                              │
 │  2. CHECK FOR APPLICABLE SKILLS                                              │
-│     ├─ Review .factory/skills/ for relevant skills                          │
-{{#PRIMARY_DESIGN_SKILL}}
-│     ├─ Use {{PRIMARY_DESIGN_SKILL}} for ANY UI/design work                  │
-{{/PRIMARY_DESIGN_SKILL}}
-│     ├─ Use relevant language/framework skills for implementation            │
+│     ├─ Review {{SKILLS_PATH}} for relevant skills                           │
+{{#if PRIMARY_SKILLS}}
+{{{PRIMARY_SKILLS}}}
+{{/if}}
 │     └─ Invoke skill BEFORE starting implementation                          │
 │                                                                              │
 │  3. CREATE WORKTREE (for ANY code changes)                                   │
-│     ├─ .factory/scripts/worktree-manager.sh create <slug>                   │
-│     ├─ cd .worktrees/NNN-<slug>/                                            │
-│     └─ NEVER commit directly to {{DEFAULT_BRANCH|main}}                     │
+│     ├─ {{WORKTREE_CREATE_CMD}} <slug>                                       │
+│     ├─ cd {{WORKTREE_DIR}}/NNN-<slug>/                                      │
+│     └─ NEVER commit directly to {{DEFAULT_BRANCH}}                          │
 │                                                                              │
 │  4. CREATE TODO LIST (for 3+ step tasks)                                     │
 │     ├─ Use TodoWrite tool immediately                                        │
@@ -66,11 +55,11 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 │  5. DO THE WORK                                                              │
 │     ├─ Implement changes                                                     │
 │     ├─ Run tests                                                             │
-│     └─ Create PR via worktree-manager.sh pr-create <id>                     │
+│     └─ Create PR via {{WORKTREE_PR_CMD}} <id>                               │
 │                                                                              │
 │  6. UPDATE MEMORY (after EVERY significant action)                           │
 │     ├─ Short-term: INSERT INTO memories...                                   │
-│     └─ Long-term (for learnings): query_memory.py store lesson...           │
+│     └─ Long-term (for learnings): {{MEMORY_STORE_CMD}} lesson...            │
 │                                                                              │
 │  7. VERIFY BEFORE RESPONDING                                                 │
 │     ├─ [ ] Memory updated?                                                   │
@@ -91,7 +80,7 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 ### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)
 
 ```
-❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH|main}} branch
+❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH}} branch
 ❌ FORBIDDEN: Making changes without creating worktree first
 ✅ REQUIRED: Create worktree → Make changes → Create PR → Merge via PR
 ```
@@ -100,16 +89,16 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 
 ```bash
 # Step 1: Create worktree
-.factory/scripts/worktree-manager.sh create <descriptive-slug>
+{{WORKTREE_CREATE_CMD}} <descriptive-slug>
 
 # Step 2: cd into worktree and make changes
-cd .worktrees/NNN-<slug>/
+cd {{WORKTREE_DIR}}/NNN-<slug>/
 
 # Step 3: Commit and create PR
-.factory/scripts/worktree-manager.sh pr-create <id>
+{{WORKTREE_PR_CMD}} <id>
 ```
 
-**Applies to:** {{WORKTREE_APPLIES_TO|Application code, configs, workflows, documentation, CLAUDE.md itself}}
+**Applies to:** {{WORKTREE_APPLIES_TO}}
 
 ### 2. MEMORY REQUIREMENT (MANDATORY - NOT OPTIONAL)
 
@@ -117,12 +106,11 @@ cd .worktrees/NNN-<slug>/
 
 ```bash
 # AFTER EVERY SIGNIFICANT ACTION - update short-term memory:
-sqlite3 {{MEMORY_DB_PATH|agents/data/memory/short_term.db}} \
+sqlite3 {{MEMORY_DB_PATH}} \
   "INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'What you did and the result');"
 
 # AFTER EVERY FIX/DISCOVERY/LEARNING - update long-term memory:
-{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py store lesson \
-  "What you learned" --tags tag1,tag2 --importance 7
+{{MEMORY_STORE_CMD}} lesson "What you learned" --tags tag1,tag2 --importance 7
 ```
 
 **MUST store memories for:**
@@ -148,15 +136,12 @@ sqlite3 {{MEMORY_DB_PATH|agents/data/memory/short_term.db}} \
 
 | Task Type                                         | Required Skill              |
 | ------------------------------------------------- | --------------------------- |
-{{#PRIMARY_DESIGN_SKILL}}
-| UI/Design work (buttons, modals, colors, layouts) | `{{PRIMARY_DESIGN_SKILL}}`  |
-{{/PRIMARY_DESIGN_SKILL}}
+{{#if SKILL_MAPPINGS}}
+{{{SKILL_MAPPINGS}}}
+{{/if}}
 | React/TypeScript/Frontend                         | `senior-frontend`           |
 | Code review                                       | `code-reviewer`             |
 | Web testing                                       | `webapp-testing`            |
-{{#ADDITIONAL_SKILL_MAPPINGS}}
-{{ADDITIONAL_SKILL_MAPPINGS}}
-{{/ADDITIONAL_SKILL_MAPPINGS}}
 
 ```bash
 # Invoke skill FIRST, then follow its guidance
@@ -192,7 +177,7 @@ Before sending ANY response, verify:
 
 ## MEMORY SYSTEM
 
-### Short-term Memory (SQLite: `{{MEMORY_DB_PATH|agents/data/memory/short_term.db}}`)
+### Short-term Memory (SQLite: `{{MEMORY_DB_PATH}}`)
 
 Table: `memories`
 
@@ -201,10 +186,10 @@ Table: `memories`
 - `type`: TEXT (action|observation|thought|goal)
 - `content`: TEXT
 
-**BEFORE EACH DECISION**: Query recent entries (last 50) to understand your context
+**BEFORE EACH DECISION**: Query recent entries (last {{SHORT_TERM_LIMIT}}) to understand your context
 
 ```sql
-SELECT * FROM memories ORDER BY id DESC LIMIT 50;
+SELECT * FROM memories ORDER BY id DESC LIMIT {{SHORT_TERM_LIMIT}};
 ```
 
 **AFTER EACH ACTION**: INSERT a new row describing what you did and the outcome
@@ -213,11 +198,11 @@ SELECT * FROM memories ORDER BY id DESC LIMIT 50;
 INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description of action and result');
 ```
 
-Maintains last 50 entries - older entries auto-deleted via trigger.
+Maintains last {{SHORT_TERM_LIMIT}} entries - older entries auto-deleted via trigger.
 
-### Long-term Memory (Qdrant: `localhost:6333`, collection: `{{QDRANT_COLLECTION|claude_memory}}`)
+### Long-term Memory ({{LONG_TERM_BACKEND}}: `{{LONG_TERM_ENDPOINT}}`, collection: `{{LONG_TERM_COLLECTION}}`)
 
-**Start services**: `./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh`
+**Start services**: `{{MEMORY_START_CMD}}`
 
 Vector schema:
 
@@ -228,13 +213,13 @@ Vector schema:
 **Query memories** (semantic search):
 
 ```bash
-{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py long "<search terms>"
+{{MEMORY_QUERY_CMD}} "<search terms>"
 ```
 
 **Store new memory**:
 
 ```bash
-{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py store lesson "What you learned" --tags tag1,tag2 --importance 8
+{{MEMORY_STORE_CMD}} lesson "What you learned" --tags tag1,tag2 --importance 8
 ```
 
 **WHEN TO READ**: Search for memories relevant to current task/decision
@@ -250,16 +235,18 @@ Vector schema:
 
 ```bash
 # Start Qdrant (auto-creates collection and migrates memories)
-./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh
+{{MEMORY_START_CMD}}
 
 # Check status
-./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh status
+{{MEMORY_STATUS_CMD}}
 
 # Stop services
-./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh stop
+{{MEMORY_STOP_CMD}}
 ```
 
-**Docker Compose**: `{{AGENT_SERVICES_PATH|agents}}/docker-compose.yml` defines Qdrant with persistent storage.
+{{#if DOCKER_COMPOSE_PATH}}
+**Docker Compose**: `{{DOCKER_COMPOSE_PATH}}` defines Qdrant with persistent storage.
+{{/if}}
 
 ---
 
@@ -268,7 +255,7 @@ Vector schema:
 When using browser automation (Playwright, Puppeteer, or any browser tool):
 
 - ALWAYS save a screenshot after EVERY browser action (click, type, navigate, scroll, etc.)
-- Save screenshots to: `{{SCREENSHOTS_PATH|agents/data/screenshots}}/`
+- Save screenshots to: `{{SCREENSHOTS_PATH}}/`
 - Filename format: `{timestamp}_{action}.png` (e.g., `1703180400_click_button.png`)
 - Also save a `.meta` file with the same name containing:
   ```
@@ -287,7 +274,7 @@ When using browser automation (Playwright, Puppeteer, or any browser tool):
 3. **THINK** about what to do next
 4. **ACT** - execute your decision
 5. **RECORD** - write to short-term memory
-6. **IF BROWSER ACTION**: Save screenshot to `{{SCREENSHOTS_PATH|agents/data/screenshots}}/`
+6. **IF BROWSER ACTION**: Save screenshot to `{{SCREENSHOTS_PATH}}/`
 7. **OPTIONALLY** - if significant learning, add to long-term memory
 
 ---
@@ -296,7 +283,7 @@ When using browser automation (Playwright, Puppeteer, or any browser tool):
 
 You have access to reusable skills. Before attempting complex tasks:
 
-1. Check if a skill exists for it (see `.factory/skills/`)
+1. Check if a skill exists for it (see `{{SKILLS_PATH}}`)
 2. Follow the skill's patterns - they're tested and reliable
 3. If you discover a better approach, consider creating/updating a skill
 
@@ -306,136 +293,95 @@ Available skills are auto-discovered. When you see a SKILL.md, follow its instru
 
 **MANDATORY WORKFLOW REQUIREMENTS**:
 
-1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (`feature/NNN-slug` branches)
-2. **PR-Based Merges**: NO direct commits to `{{DEFAULT_BRANCH|main}}`. All changes via PR with automated review
+1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (`{{BRANCH_PREFIX}}NNN-slug` branches)
+2. **PR-Based Merges**: NO direct commits to `{{DEFAULT_BRANCH}}`. All changes via PR with automated review
 3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed
 4. **Automated Review**: PRs require signoff from reviewer agents before merge
 
-{{#WORKFLOW_DOCS_PATH}}
-See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}/GIT_WORKTREE_WORKFLOW.md) for complete details.
-{{/WORKFLOW_DOCS_PATH}}
+{{#if WORKFLOW_DOCS_PATH}}
+See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}) for complete details.
+{{/if}}
 
 ---
 
-## Repository Structure
-
-<!--
-  GENERATOR: Analyze project structure and provide a directory tree.
-  Focus on major directories, not individual files.
-  Include comments for key directories explaining their purpose.
--->
+## Repository Structure ({{STRUCTURE_DATE}})
 
 ```
 {{PROJECT_NAME}}/
-{{REPOSITORY_STRUCTURE}}
+{{{@REPOSITORY_STRUCTURE}}}
 ```
-
-{{#PATH_MIGRATION_REFERENCE}}
-### Path Migration Reference
-
-<!-- Include if project has recently restructured -->
-
-{{PATH_MIGRATION_REFERENCE}}
-{{/PATH_MIGRATION_REFERENCE}}
 
 ---
 
 ## Quick Reference
 
-{{#CLUSTER_CONTEXTS}}
+{{#if CLUSTER_CONTEXTS}}
 ### Cluster Contexts
 
-<!-- For multi-cluster Kubernetes deployments -->
-
 ```bash
-{{CLUSTER_CONTEXTS}}
+{{{CLUSTER_CONTEXTS}}}
 ```
-{{/CLUSTER_CONTEXTS}}
+{{/if}}
 
-{{#PROJECT_URLS}}
+{{#if PROJECT_URLS}}
 ### URLs
 
-<!-- Document key project URLs (app, API, auth, docs, etc.) -->
+{{{PROJECT_URLS}}}
+{{/if}}
 
-{{PROJECT_URLS}}
-{{/PROJECT_URLS}}
-
-{{#KEY_WORKFLOW_FILES}}
+{{#if KEY_WORKFLOWS}}
 ### Key Workflow Files
 
-<!-- Highlight important CI/CD workflow files -->
-
 ```
-{{KEY_WORKFLOW_FILES}}
+{{{KEY_WORKFLOWS}}}
 ```
-{{/KEY_WORKFLOW_FILES}}
+{{/if}}
 
 ### Essential Commands
 
 ```bash
 # Create worktree for new task (MANDATORY for all changes)
-.factory/scripts/worktree-manager.sh create <slug>
+{{WORKTREE_CREATE_CMD}} <slug>
 
 # Create PR with automated review
-.factory/scripts/worktree-manager.sh pr-create <id>
+{{WORKTREE_PR_CMD}} <id>
 
-{{#ESSENTIAL_COMMANDS}}
-{{ESSENTIAL_COMMANDS}}
-{{/ESSENTIAL_COMMANDS}}
+{{#if ESSENTIAL_COMMANDS}}
+{{{ESSENTIAL_COMMANDS}}}
+{{/if}}
 ```
 
 ---
 
-{{#ARCHITECTURE_OVERVIEW}}
+{{#if ARCHITECTURE_OVERVIEW}}
 ## Architecture Overview
 
-<!--
-  GENERATOR: Document the project's architecture including:
-  - High-level system design
-  - Key components and their relationships
-  - Infrastructure layout (clusters, services, databases)
-  - HA/redundancy configuration
-  - Technology stack
--->
+{{{ARCHITECTURE_OVERVIEW}}}
 
-{{ARCHITECTURE_OVERVIEW}}
+{{#if DATABASE_ARCHITECTURE}}
+### Database Architecture
+
+{{{DATABASE_ARCHITECTURE}}}
+{{/if}}
 
 ---
-{{/ARCHITECTURE_OVERVIEW}}
+{{/if}}
 
-{{#CORE_COMPONENTS}}
+{{#if CORE_COMPONENTS}}
 ## Core Components
 
-<!--
-  GENERATOR: Document each major component including:
-  - Language/framework
-  - Database connections
-  - External integrations
-  - Key patterns (caching, auth, etc.)
-  - Security considerations
-  - Performance architecture
--->
-
-{{CORE_COMPONENTS}}
+{{{CORE_COMPONENTS}}}
 
 ---
-{{/CORE_COMPONENTS}}
+{{/if}}
 
-{{#AUTHENTICATION_FLOW}}
+{{#if AUTH_FLOW}}
 ## Authentication Flow
 
-<!--
-  GENERATOR: Document auth architecture including:
-  - Auth provider integration
-  - Token/session handling
-  - Frontend auth guards
-  - Key configuration files
--->
-
-{{AUTHENTICATION_FLOW}}
+{{{AUTH_FLOW}}}
 
 ---
-{{/AUTHENTICATION_FLOW}}
+{{/if}}
 
 ## Required Workflow (MANDATORY)
 
@@ -445,15 +391,15 @@ See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}/GIT_WORKTREE_WORKFLOW.md) for
 
 ```
 1. CREATE WORKTREE
-   .factory/scripts/worktree-manager.sh create <slug>
-   → Creates feature/NNN-slug branch in .worktrees/NNN-slug/
+   {{WORKTREE_CREATE_CMD}} <slug>
+   → Creates {{BRANCH_PREFIX}}NNN-slug branch in {{WORKTREE_DIR}}/NNN-slug/
 
 2. DEVELOP
-   cd .worktrees/NNN-slug/
+   cd {{WORKTREE_DIR}}/NNN-slug/
    → Make changes, commit locally
 
 3. CREATE PR (runs tests + triggers reviewers)
-   .factory/scripts/worktree-manager.sh pr-create <id>
+   {{WORKTREE_PR_CMD}} <id>
    → Runs all offline tests (blocks if fail)
    → Pushes to origin
    → Creates PR with auto-generated description
@@ -465,152 +411,130 @@ See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}/GIT_WORKTREE_WORKFLOW.md) for
    → Auto-merge on approval
 
 5. CLEANUP
-   .factory/scripts/worktree-manager.sh cleanup <id>
+   {{WORKTREE_CLEANUP_CMD}} <id>
    → Removes worktree and deletes branch
 ```
 
+{{#if HOOKS_INSTALL_CMD}}
 **Install hooks** (one-time setup):
 
 ```bash
-.factory/scripts/install-hooks.sh
+{{HOOKS_INSTALL_CMD}}
 ```
+{{/if}}
 
 ### Before ANY Task
 
-1. Read relevant docs in `{{DOCS_PATH|docs}}/` and component folders
-{{#FIXES_PATH}}
+1. Read relevant docs in `{{DOCS_PATH}}/` and component folders
+{{#if FIXES_PATH}}
 2. Check `{{FIXES_PATH}}` for known issues
-{{/FIXES_PATH}}
-{{#PRE_TASK_CHECKLIST}}
-3. {{PRE_TASK_CHECKLIST}}
-{{/PRE_TASK_CHECKLIST}}
+{{/if}}
+{{#if CLUSTER_IDENTIFY}}
+3. {{CLUSTER_IDENTIFY}}
+{{/if}}
 4. **Create a worktree for your changes**
 
 ### For Code Changes
 
-1. **Create worktree**: `.factory/scripts/worktree-manager.sh create <slug>`
+1. **Create worktree**: `{{WORKTREE_CREATE_CMD}} <slug>`
 2. Update/create tests
-3. Run tests: `{{TEST_COMMAND|npm test}}`
+3. Run `{{TEST_COMMAND}}`
 4. Run linting and type checking
-5. **Create PR**: `.factory/scripts/worktree-manager.sh pr-create <id>`
+5. **Create PR**: `{{WORKTREE_PR_CMD}} <id>`
 
-{{#INFRA_PATH}}
+{{#if INFRA_WORKFLOW}}
 ### For Infrastructure Changes
 
-1. **Create worktree** for infrastructure changes
-2. Update infrastructure in `{{INFRA_PATH}}/`
-3. Update CI/CD workflows in `.github/workflows/`
-4. Run `{{INFRA_PLAN_COMMAND|terraform plan}}`
-5. Update secrets via GitHub Actions (not locally)
-6. **Create PR** with automated review
-{{/INFRA_PATH}}
+{{{INFRA_WORKFLOW}}}
+{{/if}}
 
 ### Before Completing
 
 1. All tests pass (enforced by pre-push hook)
 2. PR created and reviewed by agents
-{{#CHANGELOG_PATH}}
+{{#if CHANGELOG_PATH}}
 3. Create changelog in `{{CHANGELOG_PATH}}/YYYY-MM/YYYY-MM-DD_description.md`
-{{/CHANGELOG_PATH}}
+{{/if}}
 4. Update relevant documentation
 
 ---
 
-{{#TROUBLESHOOTING}}
+{{#if TROUBLESHOOTING}}
 ## Troubleshooting Quick Reference
 
-<!--
-  GENERATOR: Document common issues and solutions organized by category.
-  Use tables for symptom → solution mapping.
-  Include diagnostic commands where helpful.
--->
-
-{{TROUBLESHOOTING}}
+{{{TROUBLESHOOTING}}}
 
 ---
-{{/TROUBLESHOOTING}}
+{{/if}}
 
-{{#KEY_CONFIG_FILES}}
+{{#if KEY_CONFIG_FILES}}
 ## Key Configuration Files
 
-<!--
-  GENERATOR: Document important config files with their purpose.
-  Use a table format: File | Purpose
--->
-
-{{KEY_CONFIG_FILES}}
+| File | Purpose |
+| ---- | ------- |
+{{{KEY_CONFIG_FILES}}}
 
 ---
-{{/KEY_CONFIG_FILES}}
+{{/if}}
 
 ## Completion Checklist
 
 ```
 [ ] Tests updated and passing
 [ ] Linting/type checking passed
-{{#INFRA_PATH}}
+{{#if HAS_INFRA}}
 [ ] Infrastructure plan verified (if infra changed)
-{{/INFRA_PATH}}
+{{/if}}
 [ ] CI/CD workflows updated (if deployment changed)
-{{#CHANGELOG_PATH}}
+{{#if CHANGELOG_PATH}}
 [ ] Changelog created (for significant changes)
-{{/CHANGELOG_PATH}}
+{{/if}}
 [ ] Documentation updated
 [ ] No secrets in code/commits
 ```
 
 ---
 
-{{#CHANGELOG_PATH}}
+{{#if CHANGELOG_PATH}}
 ## Changelog Quick Reference
 
 **When to create**: New features, breaking changes, security updates, infrastructure changes, API modifications, database schema changes.
 
 **Location**: `{{CHANGELOG_PATH}}/YYYY-MM/YYYY-MM-DD_description.md`
-{{#CHANGELOG_TEMPLATE_PATH}}
-**Template**: `{{CHANGELOG_TEMPLATE_PATH}}`
-{{/CHANGELOG_TEMPLATE_PATH}}
+{{#if CHANGELOG_TEMPLATE}}
+**Template**: `{{CHANGELOG_TEMPLATE}}`
+{{/if}}
 
 **Required sections**: Metadata, Summary, Details, Technical Details, Migration Guide, Testing
 
 ---
-{{/CHANGELOG_PATH}}
+{{/if}}
 
 ## Augmented Agent Capabilities
 
-### Skills (`.factory/skills/`)
+### Skills (`{{SKILLS_PATH}}`)
 
 Invoke with `Skill` tool. Skills expand inline with detailed instructions.
 
-<!--
-  GENERATOR: Populate this table based on discovered .factory/skills/ contents.
-  Include skill name, purpose, and when to use.
--->
-
 | Skill | Purpose | Use When |
 | ----- | ------- | -------- |
-{{#SKILLS_TABLE}}
-{{SKILLS_TABLE}}
-{{/SKILLS_TABLE}}
+{{#if DISCOVERED_SKILLS}}
+{{{DISCOVERED_SKILLS}}}
+{{/if}}
 | `senior-frontend` | React/Next.js/TypeScript/Tailwind development | Building UI features, performance optimization, state management |
 | `code-reviewer` | Automated code analysis, security scanning | Reviewing PRs, code quality checks, identifying issues |
 | `webapp-testing` | Playwright-based web testing | Verifying frontend functionality, debugging UI, browser screenshots |
 
-### Custom Droids (`.factory/droids/`)
+### Custom Droids (`{{DROIDS_PATH}}`)
 
 Launch via `Task` tool with `subagent_type`. Droids run autonomously.
 
-<!--
-  GENERATOR: Discover droids from .factory/droids/ and categorize them.
-  Common categories: Language Specialists, Code Review Pipeline, Utilities
--->
-
-{{#LANGUAGE_DROIDS}}
+{{#if LANGUAGE_DROIDS}}
 **Language Specialists (PROACTIVE):**
 | Droid | Purpose |
 |-------|---------|
-{{LANGUAGE_DROIDS}}
-{{/LANGUAGE_DROIDS}}
+{{{LANGUAGE_DROIDS}}}
+{{/if}}
 
 **Code Review Pipeline:**
 | Droid | Focus |
@@ -631,7 +555,7 @@ Launch via `Task` tool with `subagent_type`. Droids run autonomously.
 | `todo-fixme-scanner` | Scans repo for TODO/FIXME markers |
 | `session-context-preservation-droid` | Maintains project knowledge across sessions |
 
-### Commands (`.factory/commands/`)
+### Commands (`{{COMMANDS_PATH}}`)
 
 High-level orchestration workflows:
 
@@ -644,15 +568,15 @@ High-level orchestration workflows:
 | `/test-plan`     | Produce test plans for code changes                                           |
 | `/todo-scan`     | Scan for TODO/FIXME markers                                                   |
 
-{{#MCP_PLUGINS_TABLE}}
+{{#if MCP_PLUGINS}}
 ### MCP Plugins (`.mcp.json`)
 
 External tool integrations:
 
 | Plugin | Purpose |
 | ------ | ------- |
-{{MCP_PLUGINS_TABLE}}
-{{/MCP_PLUGINS_TABLE}}
+{{{MCP_PLUGINS}}}
+{{/if}}
 
 ### Usage Patterns
 
@@ -673,13 +597,13 @@ External tool integrations:
 3. Returns blockers and required actions
 ```
 
-{{#LANGUAGE_USAGE_EXAMPLES}}
+{{#if LANGUAGE_EXAMPLES}}
 **Language-Specific Refactoring:**
 
 ```
-{{LANGUAGE_USAGE_EXAMPLES}}
+{{{LANGUAGE_EXAMPLES}}}
 ```
-{{/LANGUAGE_USAGE_EXAMPLES}}
+{{/if}}
 
 **Frontend Development:**
 
@@ -689,5 +613,27 @@ Skill(skill: "senior-frontend")
 # Then follow expanded instructions
 ```
 
-</coding_guidelines>
+---
 
+{{#if PREPOPULATED_KNOWLEDGE}}
+## Project Knowledge (Auto-Populated)
+
+### Recent Activity (Short-term Context)
+
+{{{RECENT_ACTIVITY}}}
+
+### Learned Lessons (Long-term Knowledge)
+
+{{{LEARNED_LESSONS}}}
+
+### Known Gotchas
+
+{{{KNOWN_GOTCHAS}}}
+
+### Hot Spots (Frequently Modified Files)
+
+{{{HOT_SPOTS}}}
+
+{{/if}}
+
+</coding_guidelines>
