@@ -16,7 +16,7 @@ Provides:
 
 ```bash
 # Automatic installer with Docker detection
-bash <(curl -fsSL https://universal-agent-memory.dev/install-desktop.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-desktop.sh)
 
 # Or manually with npm
 npm install -g @universal-agent-memory/cli
@@ -29,7 +29,7 @@ npx @universal-agent-memory/cli init --desktop
 
 ```bash
 # Quick web setup
-bash <(curl -fsSL https://universal-agent-memory.dev/install-web.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-web.sh)
 
 # Or manually
 npx @universal-agent-memory/cli init --web
@@ -171,7 +171,7 @@ Configuration is stored in `.uam.json`:
 
 ```json
 {
-  "$schema": "https://universal-agent-memory.dev/schema.json",
+  "$schema": "https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/schema.json",
   "version": "1.0.0",
   "project": {
     "name": "my-project",

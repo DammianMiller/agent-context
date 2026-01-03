@@ -93,7 +93,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
   // Build configuration
   const config: AgentContextConfig = {
-    $schema: 'https://universal-agent-memory.dev/schema.json',
+    $schema: 'https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/schema.json',
     version: '1.0.0',
     project: {
       name: analysis.projectName,

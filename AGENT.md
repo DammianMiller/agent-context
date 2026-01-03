@@ -37,9 +37,9 @@ When using browser automation:
 
 ### URLs
 
-- **URL**: https://universal-agent-memory.dev/install-desktop.sh
-- **URL**: https://universal-agent-memory.dev/install-web.sh
-- **URL**: https://universal-agent-memory.dev/schema.json&quot;,
+- **URL**: https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-desktop.sh
+- **URL**: https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-web.sh
+- **URL**: https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/schema.json
 - **URL**: https://xxxxx.aws.cloud.qdrant.io:6333&quot;,
 - **URL**: https://xxxxx.aws.cloud.qdrant.io:6333
 

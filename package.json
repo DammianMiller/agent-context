@@ -42,6 +42,14 @@
     "type": "git",
     "url": "https://github.com/DammianMiller/universal-agent-memory.git"
   },
+  "homepage": "https://github.com/DammianMiller/universal-agent-memory#readme",
+  "bugs": {
+    "url": "https://github.com/DammianMiller/universal-agent-memory/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "engines": {
     "node": ">=18.0.0"
   },
