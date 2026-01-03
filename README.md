@@ -19,10 +19,10 @@ Provides:
 bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-desktop.sh)
 
 # Or manually with npm
-npm install -g @universal-agent-memory/cli
+npm install -g universal-agent-memory
 
 # Or use npx
-npx @universal-agent-memory/cli init --desktop
+npx universal-agent-memory init --desktop
 ```
 
 ### Web Browsers (claude.ai, factory.ai)
@@ -32,7 +32,7 @@ npx @universal-agent-memory/cli init --desktop
 bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-web.sh)
 
 # Or manually
-npx @universal-agent-memory/cli init --web
+npx universal-agent-memory init --web
 ```
 
 Web installations use:

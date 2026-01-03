@@ -1,5 +1,5 @@
 {
-  "name": "@universal-agent-memory/cli",
+  "name": "universal-agent-memory",
   "version": "0.1.0",
   "description": "Universal AI agent memory system - CLAUDE.md templates, memory, worktrees for Claude Code, Factory.AI, VSCode, OpenCode",
   "type": "module",

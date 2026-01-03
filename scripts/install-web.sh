@@ -25,7 +25,7 @@ echo ""
 echo "📦 Installing universal-agent-memory CLI..."
 
 # Try npm install first, fall back to git clone if package not published yet
-if npm install -g @universal-agent-memory/cli 2>/dev/null; then
+if npm install -g universal-agent-memory 2>/dev/null; then
     echo "✅ Installed from npm registry"
 else
     echo "⚠️  Package not yet on npm, installing from GitHub..."

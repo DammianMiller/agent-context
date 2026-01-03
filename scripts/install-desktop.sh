@@ -47,10 +47,10 @@ fi
 
 # Install the CLI globally
 echo ""
-echo "Installing @universal-agent-memory/cli..."
+echo "Installing universal-agent-memory..."
 
 # Try npm install first, fall back to git clone if package not published yet
-if npm install -g @universal-agent-memory/cli 2>/dev/null; then
+if npm install -g universal-agent-memory 2>/dev/null; then
     echo -e "${GREEN}✓${NC} Installed from npm registry"
 else
     echo -e "${YELLOW}Package not yet on npm, installing from GitHub...${NC}"

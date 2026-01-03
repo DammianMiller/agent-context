@@ -1,8 +1,8 @@
 <coding_guidelines>
 
-# AGENT.md - @universal-agent-memory/cli Development Guide
+# AGENT.md - universal-agent-memory Development Guide
 
-You are an AI assistant helping with the @universal-agent-memory/cli project.
+You are an AI assistant helping with the universal-agent-memory project.
 
 > Universal AI agent memory system - CLAUDE.md templates, memory, worktrees for Claude Code, Factory.AI, VSCode, OpenCode
 
