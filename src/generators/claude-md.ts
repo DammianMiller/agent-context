@@ -1,8 +1,12 @@
 import Handlebars from 'handlebars';
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import type { ProjectAnalysis, AgentContextConfig } from '../types/index.js';
 import { prepopulateMemory, type DiscoveredSkill } from '../memory/prepopulate.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export async function generateClaudeMd(
   analysis: ProjectAnalysis,
@@ -681,10 +685,18 @@ function buildPrepopulatedKnowledge(
 }
 
 function getDesktopTemplate(): string {
-  // Read from template file if it exists, otherwise use inline
-  const templatePath = join(process.cwd(), 'templates/CLAUDE.template.md');
-  if (existsSync(templatePath)) {
-    return readFileSync(templatePath, 'utf-8');
+  // Check locations in order:
+  // 1. User's project templates directory
+  // 2. Package's templates directory (for npm installed version)
+  const userTemplatePath = join(process.cwd(), 'templates/CLAUDE.template.md');
+  const packageTemplatePath = join(__dirname, '../../templates/CLAUDE.template.md');
+  
+  if (existsSync(userTemplatePath)) {
+    return readFileSync(userTemplatePath, 'utf-8');
+  }
+  
+  if (existsSync(packageTemplatePath)) {
+    return readFileSync(packageTemplatePath, 'utf-8');
   }
 
   // Fallback inline template for desktop

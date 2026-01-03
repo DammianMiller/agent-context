@@ -512,12 +512,39 @@ See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}) for complete details.
 
 ## Augmented Agent Capabilities
 
+### ⚡ PROACTIVE Skills & Droids - INVOKE AUTOMATICALLY
+
+**These must be invoked WITHOUT being asked - they ensure quality, security, and performance:**
+
+| Trigger | Invoke | Purpose |
+|---------|--------|---------|
+| ANY TypeScript/JavaScript change | `typescript-node-expert` | Strict typing, async patterns, best practices |
+| ANY CLI command work | `cli-design-expert` | UX, help systems, error messages |
+| BEFORE any commit/PR | `code-quality-guardian` | Complexity, naming, code smells |
+| BEFORE any commit/PR | `security-auditor` | OWASP, secrets, injection, auth |
+| Performance-critical code | `performance-optimizer` | Algorithms, memory, caching |
+| New features or changes | `documentation-expert` | JSDoc, README, API docs |
+
+```bash
+# Invoke proactively - don't wait to be asked
+Skill(skill: "typescript-node-expert")   # For TS/JS work
+Skill(skill: "cli-design-expert")        # For CLI work
+
+# Launch droids for review
+Task(subagent_type: "code-quality-guardian", prompt: "Review changes in...")
+Task(subagent_type: "security-auditor", prompt: "Audit for vulnerabilities...")
+Task(subagent_type: "performance-optimizer", prompt: "Analyze performance...")
+Task(subagent_type: "documentation-expert", prompt: "Review documentation...")
+```
+
 ### Skills (`{{SKILLS_PATH}}`)
 
 Invoke with `Skill` tool. Skills expand inline with detailed instructions.
 
 | Skill | Purpose | Use When |
 | ----- | ------- | -------- |
+| `typescript-node-expert` | Strict TS, async patterns, ESM, performance | **PROACTIVE** - All TypeScript work |
+| `cli-design-expert` | CLI UX, help, errors, prompts, output | **PROACTIVE** - All CLI development |
 {{#if DISCOVERED_SKILLS}}
 {{{DISCOVERED_SKILLS}}}
 {{/if}}
@@ -528,6 +555,14 @@ Invoke with `Skill` tool. Skills expand inline with detailed instructions.
 ### Custom Droids (`{{DROIDS_PATH}}`)
 
 Launch via `Task` tool with `subagent_type`. Droids run autonomously.
+
+**⚡ PROACTIVE Quality Droids (Run before EVERY commit/PR):**
+| Droid | Focus | When to Invoke |
+|-------|-------|----------------|
+| `code-quality-guardian` | Complexity, naming, SOLID, code smells | **PROACTIVE** - All code changes |
+| `security-auditor` | OWASP, secrets, injection, auth | **PROACTIVE** - All code changes |
+| `performance-optimizer` | Algorithms, memory, caching, I/O | **PROACTIVE** - Performance-critical code |
+| `documentation-expert` | JSDoc, README, API docs, accuracy | **PROACTIVE** - New features/APIs |
 
 {{#if LANGUAGE_DROIDS}}
 **Language Specialists (PROACTIVE):**
