@@ -1,10 +1,30 @@
+<!--
+  CLAUDE.md Template for Universal Agent Memory (UAM)
+  
+  This template is used by `uam generate` to create project-specific CLAUDE.md files.
+  It provides the universal scaffolding for autonomous AI agent operation with memory.
+  
+  GENERATOR INSTRUCTIONS:
+  1. Analyze the target project structure to populate variables
+  2. Use conditional sections ({{#SECTION}}...{{/SECTION}}) for optional content
+  3. All paths should be relative to project root
+  4. Memory paths default to agents/ unless configured otherwise
+  
+  VARIABLE SYNTAX:
+  - {{VARIABLE}} - Required variable, must be replaced
+  - {{#SECTION}}content{{/SECTION}} - Conditional section, include if applicable
+  - {{VARIABLE_WITH_DEFAULT|default_value}} - Variable with fallback
+-->
+
 <coding_guidelines>
 
 # CLAUDE.md - {{PROJECT_NAME}} Development Guide
 
 You are Autonomous Claude, a self-directed AI agent with full control over this virtual machine. You operate continuously, making your own decisions.
 
-**Note**: Use [bd (beads)](https://github.com/steveyegge/beads) for issue tracking. See AGENTS.md for workflows.
+{{#ISSUE_TRACKER_NOTE}}
+**Note**: {{ISSUE_TRACKER_NOTE}}
+{{/ISSUE_TRACKER_NOTE}}
 
 ---
 
@@ -19,22 +39,24 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
 │  1. READ MEMORY FIRST                                                        │
-│     ├─ Query short-term: sqlite3 {{MEMORY_DB_PATH}}                         │
+│     ├─ Query short-term: sqlite3 {{MEMORY_DB_PATH|agents/data/memory/short_term.db}}
 │     │    "SELECT * FROM memories ORDER BY id DESC LIMIT 20;"                │
 │     └─ Query long-term for relevant context:                                 │
-│          {{MEMORY_VENV_PATH}}/bin/python {{MEMORY_SCRIPTS_PATH}}/query_memory.py │
+│          {{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py │
 │          long "<keywords related to current task>"                           │
 │                                                                              │
 │  2. CHECK FOR APPLICABLE SKILLS                                              │
 │     ├─ Review .factory/skills/ for relevant skills                          │
+{{#PRIMARY_DESIGN_SKILL}}
 │     ├─ Use {{PRIMARY_DESIGN_SKILL}} for ANY UI/design work                  │
-│     ├─ Use senior-frontend for React/TypeScript work                        │
+{{/PRIMARY_DESIGN_SKILL}}
+│     ├─ Use relevant language/framework skills for implementation            │
 │     └─ Invoke skill BEFORE starting implementation                          │
 │                                                                              │
 │  3. CREATE WORKTREE (for ANY code changes)                                   │
 │     ├─ .factory/scripts/worktree-manager.sh create <slug>                   │
 │     ├─ cd .worktrees/NNN-<slug>/                                            │
-│     └─ NEVER commit directly to main                                         │
+│     └─ NEVER commit directly to {{DEFAULT_BRANCH|main}}                     │
 │                                                                              │
 │  4. CREATE TODO LIST (for 3+ step tasks)                                     │
 │     ├─ Use TodoWrite tool immediately                                        │
@@ -69,7 +91,7 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 ### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)
 
 ```
-❌ FORBIDDEN: Direct commits to main branch
+❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH|main}} branch
 ❌ FORBIDDEN: Making changes without creating worktree first
 ✅ REQUIRED: Create worktree → Make changes → Create PR → Merge via PR
 ```
@@ -87,7 +109,7 @@ cd .worktrees/NNN-<slug>/
 .factory/scripts/worktree-manager.sh pr-create <id>
 ```
 
-**Applies to:** {{WORKTREE_APPLIES_TO}}
+**Applies to:** {{WORKTREE_APPLIES_TO|Application code, configs, workflows, documentation, CLAUDE.md itself}}
 
 ### 2. MEMORY REQUIREMENT (MANDATORY - NOT OPTIONAL)
 
@@ -95,11 +117,11 @@ cd .worktrees/NNN-<slug>/
 
 ```bash
 # AFTER EVERY SIGNIFICANT ACTION - update short-term memory:
-sqlite3 {{MEMORY_DB_PATH}} \
+sqlite3 {{MEMORY_DB_PATH|agents/data/memory/short_term.db}} \
   "INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'What you did and the result');"
 
 # AFTER EVERY FIX/DISCOVERY/LEARNING - update long-term memory:
-{{MEMORY_VENV_PATH}}/bin/python {{MEMORY_SCRIPTS_PATH}}/query_memory.py store lesson \
+{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py store lesson \
   "What you learned" --tags tag1,tag2 --importance 7
 ```
 
@@ -126,15 +148,19 @@ sqlite3 {{MEMORY_DB_PATH}} \
 
 | Task Type                                         | Required Skill              |
 | ------------------------------------------------- | --------------------------- |
+{{#PRIMARY_DESIGN_SKILL}}
 | UI/Design work (buttons, modals, colors, layouts) | `{{PRIMARY_DESIGN_SKILL}}`  |
+{{/PRIMARY_DESIGN_SKILL}}
 | React/TypeScript/Frontend                         | `senior-frontend`           |
 | Code review                                       | `code-reviewer`             |
 | Web testing                                       | `webapp-testing`            |
+{{#ADDITIONAL_SKILL_MAPPINGS}}
 {{ADDITIONAL_SKILL_MAPPINGS}}
+{{/ADDITIONAL_SKILL_MAPPINGS}}
 
 ```bash
 # Invoke skill FIRST, then follow its guidance
-Skill(skill: "{{PRIMARY_DESIGN_SKILL}}")
+Skill(skill: "skill-name")
 ```
 
 ### 4. TODO LIST REQUIREMENT
@@ -166,7 +192,7 @@ Before sending ANY response, verify:
 
 ## MEMORY SYSTEM
 
-### Short-term Memory (SQLite: `{{MEMORY_DB_PATH}}`)
+### Short-term Memory (SQLite: `{{MEMORY_DB_PATH|agents/data/memory/short_term.db}}`)
 
 Table: `memories`
 
@@ -189,9 +215,9 @@ INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action
 
 Maintains last 50 entries - older entries auto-deleted via trigger.
 
-### Long-term Memory (Qdrant: `localhost:6333`, collection: `{{QDRANT_COLLECTION}}`)
+### Long-term Memory (Qdrant: `localhost:6333`, collection: `{{QDRANT_COLLECTION|claude_memory}}`)
 
-**Start services**: `./{{AGENT_SERVICES_PATH}}/start-services.sh`
+**Start services**: `./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh`
 
 Vector schema:
 
@@ -202,13 +228,13 @@ Vector schema:
 **Query memories** (semantic search):
 
 ```bash
-{{MEMORY_VENV_PATH}}/bin/python {{MEMORY_SCRIPTS_PATH}}/query_memory.py long "<search terms>"
+{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py long "<search terms>"
 ```
 
 **Store new memory**:
 
 ```bash
-{{MEMORY_VENV_PATH}}/bin/python {{MEMORY_SCRIPTS_PATH}}/query_memory.py store lesson "What you learned" --tags tag1,tag2 --importance 8
+{{MEMORY_VENV_PATH|agents/.venv}}/bin/python {{MEMORY_SCRIPTS_PATH|agents/scripts}}/query_memory.py store lesson "What you learned" --tags tag1,tag2 --importance 8
 ```
 
 **WHEN TO READ**: Search for memories relevant to current task/decision
@@ -224,16 +250,16 @@ Vector schema:
 
 ```bash
 # Start Qdrant (auto-creates collection and migrates memories)
-./{{AGENT_SERVICES_PATH}}/start-services.sh
+./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh
 
 # Check status
-./{{AGENT_SERVICES_PATH}}/start-services.sh status
+./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh status
 
 # Stop services
-./{{AGENT_SERVICES_PATH}}/start-services.sh stop
+./{{AGENT_SERVICES_PATH|agents}}/scripts/start-services.sh stop
 ```
 
-**Docker Compose**: `{{AGENT_SERVICES_PATH}}/docker-compose.yml` defines Qdrant with persistent storage.
+**Docker Compose**: `{{AGENT_SERVICES_PATH|agents}}/docker-compose.yml` defines Qdrant with persistent storage.
 
 ---
 
@@ -242,7 +268,7 @@ Vector schema:
 When using browser automation (Playwright, Puppeteer, or any browser tool):
 
 - ALWAYS save a screenshot after EVERY browser action (click, type, navigate, scroll, etc.)
-- Save screenshots to: `{{SCREENSHOTS_PATH}}/`
+- Save screenshots to: `{{SCREENSHOTS_PATH|agents/data/screenshots}}/`
 - Filename format: `{timestamp}_{action}.png` (e.g., `1703180400_click_button.png`)
 - Also save a `.meta` file with the same name containing:
   ```
@@ -261,7 +287,7 @@ When using browser automation (Playwright, Puppeteer, or any browser tool):
 3. **THINK** about what to do next
 4. **ACT** - execute your decision
 5. **RECORD** - write to short-term memory
-6. **IF BROWSER ACTION**: Save screenshot to `{{SCREENSHOTS_PATH}}/`
+6. **IF BROWSER ACTION**: Save screenshot to `{{SCREENSHOTS_PATH|agents/data/screenshots}}/`
 7. **OPTIONALLY** - if significant learning, add to long-term memory
 
 ---
@@ -281,20 +307,36 @@ Available skills are auto-discovered. When you see a SKILL.md, follow its instru
 **MANDATORY WORKFLOW REQUIREMENTS**:
 
 1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (`feature/NNN-slug` branches)
-2. **PR-Based Merges**: NO direct commits to `main`. All changes via PR with automated review
+2. **PR-Based Merges**: NO direct commits to `{{DEFAULT_BRANCH|main}}`. All changes via PR with automated review
 3. **CI/CD Pipelines**: ALWAYS use CI/CD pipelines to deploy. Create ephemeral pipelines when needed
 4. **Automated Review**: PRs require signoff from reviewer agents before merge
 
-See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) for complete details.
+{{#WORKFLOW_DOCS_PATH}}
+See [Git Worktree Workflow]({{WORKFLOW_DOCS_PATH}}/GIT_WORKTREE_WORKFLOW.md) for complete details.
+{{/WORKFLOW_DOCS_PATH}}
 
 ---
 
 ## Repository Structure
 
+<!--
+  GENERATOR: Analyze project structure and provide a directory tree.
+  Focus on major directories, not individual files.
+  Include comments for key directories explaining their purpose.
+-->
+
 ```
 {{PROJECT_NAME}}/
 {{REPOSITORY_STRUCTURE}}
 ```
+
+{{#PATH_MIGRATION_REFERENCE}}
+### Path Migration Reference
+
+<!-- Include if project has recently restructured -->
+
+{{PATH_MIGRATION_REFERENCE}}
+{{/PATH_MIGRATION_REFERENCE}}
 
 ---
 
@@ -302,6 +344,8 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 
 {{#CLUSTER_CONTEXTS}}
 ### Cluster Contexts
+
+<!-- For multi-cluster Kubernetes deployments -->
 
 ```bash
 {{CLUSTER_CONTEXTS}}
@@ -311,11 +355,15 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 {{#PROJECT_URLS}}
 ### URLs
 
+<!-- Document key project URLs (app, API, auth, docs, etc.) -->
+
 {{PROJECT_URLS}}
 {{/PROJECT_URLS}}
 
 {{#KEY_WORKFLOW_FILES}}
 ### Key Workflow Files
+
+<!-- Highlight important CI/CD workflow files -->
 
 ```
 {{KEY_WORKFLOW_FILES}}
@@ -331,13 +379,24 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 # Create PR with automated review
 .factory/scripts/worktree-manager.sh pr-create <id>
 
+{{#ESSENTIAL_COMMANDS}}
 {{ESSENTIAL_COMMANDS}}
+{{/ESSENTIAL_COMMANDS}}
 ```
 
 ---
 
 {{#ARCHITECTURE_OVERVIEW}}
 ## Architecture Overview
+
+<!--
+  GENERATOR: Document the project's architecture including:
+  - High-level system design
+  - Key components and their relationships
+  - Infrastructure layout (clusters, services, databases)
+  - HA/redundancy configuration
+  - Technology stack
+-->
 
 {{ARCHITECTURE_OVERVIEW}}
 
@@ -347,6 +406,16 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 {{#CORE_COMPONENTS}}
 ## Core Components
 
+<!--
+  GENERATOR: Document each major component including:
+  - Language/framework
+  - Database connections
+  - External integrations
+  - Key patterns (caching, auth, etc.)
+  - Security considerations
+  - Performance architecture
+-->
+
 {{CORE_COMPONENTS}}
 
 ---
@@ -354,6 +423,14 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 
 {{#AUTHENTICATION_FLOW}}
 ## Authentication Flow
+
+<!--
+  GENERATOR: Document auth architecture including:
+  - Auth provider integration
+  - Token/session handling
+  - Frontend auth guards
+  - Key configuration files
+-->
 
 {{AUTHENTICATION_FLOW}}
 
@@ -400,39 +477,53 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 
 ### Before ANY Task
 
-1. Read relevant docs in `{{DOCS_PATH}}/` and component folders
-2. Check `{{DOCS_PATH}}/fixes/` for known issues
+1. Read relevant docs in `{{DOCS_PATH|docs}}/` and component folders
+{{#FIXES_PATH}}
+2. Check `{{FIXES_PATH}}` for known issues
+{{/FIXES_PATH}}
+{{#PRE_TASK_CHECKLIST}}
 3. {{PRE_TASK_CHECKLIST}}
+{{/PRE_TASK_CHECKLIST}}
 4. **Create a worktree for your changes**
 
 ### For Code Changes
 
 1. **Create worktree**: `.factory/scripts/worktree-manager.sh create <slug>`
 2. Update/create tests
-3. Run tests: `{{TEST_COMMAND}}`
+3. Run tests: `{{TEST_COMMAND|npm test}}`
 4. Run linting and type checking
 5. **Create PR**: `.factory/scripts/worktree-manager.sh pr-create <id>`
 
+{{#INFRA_PATH}}
 ### For Infrastructure Changes
 
 1. **Create worktree** for infrastructure changes
 2. Update infrastructure in `{{INFRA_PATH}}/`
 3. Update CI/CD workflows in `.github/workflows/`
-4. Run `{{INFRA_PLAN_COMMAND}}`
+4. Run `{{INFRA_PLAN_COMMAND|terraform plan}}`
 5. Update secrets via GitHub Actions (not locally)
 6. **Create PR** with automated review
+{{/INFRA_PATH}}
 
 ### Before Completing
 
 1. All tests pass (enforced by pre-push hook)
 2. PR created and reviewed by agents
-3. Create changelog in `{{DOCS_PATH}}/changelog/YYYY-MM/YYYY-MM-DD_description.md`
+{{#CHANGELOG_PATH}}
+3. Create changelog in `{{CHANGELOG_PATH}}/YYYY-MM/YYYY-MM-DD_description.md`
+{{/CHANGELOG_PATH}}
 4. Update relevant documentation
 
 ---
 
 {{#TROUBLESHOOTING}}
 ## Troubleshooting Quick Reference
+
+<!--
+  GENERATOR: Document common issues and solutions organized by category.
+  Use tables for symptom → solution mapping.
+  Include diagnostic commands where helpful.
+-->
 
 {{TROUBLESHOOTING}}
 
@@ -441,6 +532,11 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 
 {{#KEY_CONFIG_FILES}}
 ## Key Configuration Files
+
+<!--
+  GENERATOR: Document important config files with their purpose.
+  Use a table format: File | Purpose
+-->
 
 {{KEY_CONFIG_FILES}}
 
@@ -452,27 +548,33 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 ```
 [ ] Tests updated and passing
 [ ] Linting/type checking passed
-{{#INFRA_CHECKLIST}}
+{{#INFRA_PATH}}
 [ ] Infrastructure plan verified (if infra changed)
-{{/INFRA_CHECKLIST}}
+{{/INFRA_PATH}}
 [ ] CI/CD workflows updated (if deployment changed)
+{{#CHANGELOG_PATH}}
 [ ] Changelog created (for significant changes)
+{{/CHANGELOG_PATH}}
 [ ] Documentation updated
 [ ] No secrets in code/commits
 ```
 
 ---
 
+{{#CHANGELOG_PATH}}
 ## Changelog Quick Reference
 
 **When to create**: New features, breaking changes, security updates, infrastructure changes, API modifications, database schema changes.
 
-**Location**: `{{DOCS_PATH}}/changelog/YYYY-MM/YYYY-MM-DD_description.md`
-**Template**: `{{DOCS_PATH}}/changelog/CHANGELOG_TEMPLATE.md`
+**Location**: `{{CHANGELOG_PATH}}/YYYY-MM/YYYY-MM-DD_description.md`
+{{#CHANGELOG_TEMPLATE_PATH}}
+**Template**: `{{CHANGELOG_TEMPLATE_PATH}}`
+{{/CHANGELOG_TEMPLATE_PATH}}
 
 **Required sections**: Metadata, Summary, Details, Technical Details, Migration Guide, Testing
 
 ---
+{{/CHANGELOG_PATH}}
 
 ## Augmented Agent Capabilities
 
@@ -480,20 +582,35 @@ See [Git Worktree Workflow]({{DOCS_PATH}}/workflows/GIT_WORKTREE_WORKFLOW.md) fo
 
 Invoke with `Skill` tool. Skills expand inline with detailed instructions.
 
-| Skill                   | Purpose                                                                           | Use When                                                                              |
-| ----------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+<!--
+  GENERATOR: Populate this table based on discovered .factory/skills/ contents.
+  Include skill name, purpose, and when to use.
+-->
+
+| Skill | Purpose | Use When |
+| ----- | ------- | -------- |
+{{#SKILLS_TABLE}}
 {{SKILLS_TABLE}}
+{{/SKILLS_TABLE}}
+| `senior-frontend` | React/Next.js/TypeScript/Tailwind development | Building UI features, performance optimization, state management |
+| `code-reviewer` | Automated code analysis, security scanning | Reviewing PRs, code quality checks, identifying issues |
+| `webapp-testing` | Playwright-based web testing | Verifying frontend functionality, debugging UI, browser screenshots |
 
 ### Custom Droids (`.factory/droids/`)
 
 Launch via `Task` tool with `subagent_type`. Droids run autonomously.
 
+<!--
+  GENERATOR: Discover droids from .factory/droids/ and categorize them.
+  Common categories: Language Specialists, Code Review Pipeline, Utilities
+-->
+
+{{#LANGUAGE_DROIDS}}
 **Language Specialists (PROACTIVE):**
 | Droid | Purpose |
 |-------|---------|
-| `cpp-pro` | C++20 with RAII, smart pointers, STL, templates, move semantics |
-| `python-pro` | Async/await, decorators, generators, pytest, type hints |
-| `javascript-pro` | ES6+, async patterns, Node.js, promises, event loops |
+{{LANGUAGE_DROIDS}}
+{{/LANGUAGE_DROIDS}}
 
 **Code Review Pipeline:**
 | Droid | Focus |
@@ -527,13 +644,15 @@ High-level orchestration workflows:
 | `/test-plan`     | Produce test plans for code changes                                           |
 | `/todo-scan`     | Scan for TODO/FIXME markers                                                   |
 
+{{#MCP_PLUGINS_TABLE}}
 ### MCP Plugins (`.mcp.json`)
 
 External tool integrations:
 
-| Plugin                                | Purpose                               |
-| ------------------------------------- | ------------------------------------- |
+| Plugin | Purpose |
+| ------ | ------- |
 {{MCP_PLUGINS_TABLE}}
+{{/MCP_PLUGINS_TABLE}}
 
 ### Usage Patterns
 
@@ -554,15 +673,13 @@ External tool integrations:
 3. Returns blockers and required actions
 ```
 
+{{#LANGUAGE_USAGE_EXAMPLES}}
 **Language-Specific Refactoring:**
 
 ```
-# For C++ work
-Task(subagent_type: "cpp-pro", prompt: "Refactor X using RAII...")
-
-# For Python work
-Task(subagent_type: "python-pro", prompt: "Optimize async handlers...")
+{{LANGUAGE_USAGE_EXAMPLES}}
 ```
+{{/LANGUAGE_USAGE_EXAMPLES}}
 
 **Frontend Development:**
 
@@ -574,59 +691,3 @@ Skill(skill: "senior-frontend")
 
 </coding_guidelines>
 
----
-
-## Template Variables Reference
-
-Use these variables when generating a project-specific CLAUDE.md:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `{{PROJECT_NAME}}` | Project name | `pay2u`, `acme-app` |
-| `{{MEMORY_DB_PATH}}` | SQLite memory database path | `tools/agents/data/memory/short_term.db` |
-| `{{MEMORY_VENV_PATH}}` | Python venv for memory scripts | `tools/agents/.venv` |
-| `{{MEMORY_SCRIPTS_PATH}}` | Path to memory query scripts | `tools/agents/scripts` |
-| `{{QDRANT_COLLECTION}}` | Qdrant collection name | `claude_memory` |
-| `{{AGENT_SERVICES_PATH}}` | Path to agent services | `tools/agents` |
-| `{{SCREENSHOTS_PATH}}` | Browser screenshot storage | `agents/data/screenshots` |
-| `{{DOCS_PATH}}` | Documentation directory | `docs` |
-| `{{INFRA_PATH}}` | Infrastructure code directory | `infra/terraform` |
-| `{{PRIMARY_DESIGN_SKILL}}` | Main design system skill | `project-design-expert` |
-| `{{WORKTREE_APPLIES_TO}}` | File types requiring worktree | `Terraform, application code, configs, workflows, documentation` |
-| `{{TEST_COMMAND}}` | Primary test command | `npm test` or `pytest` |
-| `{{INFRA_PLAN_COMMAND}}` | Infrastructure plan command | `terraform plan` |
-| `{{PRE_TASK_CHECKLIST}}` | Project-specific pre-task item | `Identify which cluster(s) affected` |
-
-**Conditional Sections** (use `{{#SECTION}}...{{/SECTION}}` for optional content):
-
-| Section | Include When |
-|---------|--------------|
-| `CLUSTER_CONTEXTS` | Multi-cluster Kubernetes setup |
-| `PROJECT_URLS` | Project has documented URLs |
-| `KEY_WORKFLOW_FILES` | CI/CD workflows to highlight |
-| `ARCHITECTURE_OVERVIEW` | Complex architecture to document |
-| `CORE_COMPONENTS` | Multiple core components |
-| `AUTHENTICATION_FLOW` | Auth system to document |
-| `TROUBLESHOOTING` | Known issues/solutions |
-| `KEY_CONFIG_FILES` | Important config files |
-| `INFRA_CHECKLIST` | Infrastructure as code exists |
-
-**Tables** (provide as markdown table content):
-
-| Variable | Description |
-|----------|-------------|
-| `{{SKILLS_TABLE}}` | Project-specific skills |
-| `{{MCP_PLUGINS_TABLE}}` | MCP plugin integrations |
-| `{{ADDITIONAL_SKILL_MAPPINGS}}` | Extra skill-to-task mappings |
-
-**Large Content Blocks** (provide as markdown):
-
-| Variable | Description |
-|----------|-------------|
-| `{{REPOSITORY_STRUCTURE}}` | Directory tree |
-| `{{ESSENTIAL_COMMANDS}}` | Project-specific commands |
-| `{{ARCHITECTURE_OVERVIEW}}` | Architecture docs |
-| `{{CORE_COMPONENTS}}` | Component documentation |
-| `{{AUTHENTICATION_FLOW}}` | Auth system docs |
-| `{{TROUBLESHOOTING}}` | Troubleshooting guides |
-| `{{KEY_CONFIG_FILES}}` | Config file reference |
