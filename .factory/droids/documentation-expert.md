@@ -2,6 +2,10 @@
 name: documentation-expert
 description: Proactive documentation specialist that ensures all code, APIs, and features are clearly documented. Creates comprehensive, accurate, and maintainable documentation.
 model: inherit
+coordination:
+  channels: ["review", "broadcast", "deploy"]
+  claims: ["shared"]
+  batches_deploy: true
 ---
 # Documentation Expert
 
@@ -148,7 +152,6 @@ export interface AgentContextConfig {
 ```
 
 ---
-
 ## README Structure
 
 ```markdown
@@ -258,7 +261,6 @@ MIT - see [LICENSE](LICENSE)
 ```
 
 ---
-
 ## API Documentation
 
 ### OpenAPI/Swagger for REST APIs

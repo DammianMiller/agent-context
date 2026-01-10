@@ -2,6 +2,10 @@
 name: security-auditor
 description: Proactive security analyst that reviews all code for vulnerabilities, secrets exposure, injection attacks, and security best practices. Zero tolerance for security issues.
 model: inherit
+coordination:
+  channels: ["review", "broadcast"]
+  claims: ["exclusive"]
+  batches_deploy: true
 ---
 # Security Auditor
 
@@ -196,7 +200,6 @@ const securityHeaders = {
 ```
 
 ---
-
 ## Dependency Security
 
 ```bash
@@ -226,7 +229,6 @@ npx is-my-node-vulnerable
 ```
 
 ---
-
 ## Review Output Format
 
 ```markdown
@@ -320,3 +322,85 @@ After each review:
 2. Update .gitignore with sensitive file patterns
 3. Recommend security training if patterns repeat
 4. Track security debt separately from technical debt
+
+---
+
+## Agent Coordination Protocol
+
+This droid participates in the multi-agent coordination system. Since each agent works in an **isolated git worktree**, coordination is about **optimizing velocity** and **minimizing merge conflicts**, not about locking resources.
+
+### Key Principles
+1. **Worktree Isolation**: Each agent has its own branch - no direct conflicts during work
+2. **Announce, Don't Lock**: Announcements are informational - they help predict merge pain
+3. **Coordinate Merge Order**: The agent who finishes first should merge first
+4. **Batch Deploys**: Queue commits to reduce CI/CD runs
+
+### On Startup
+```bash
+# Register with coordination service, including worktree branch
+AGENT_ID=$(uam agent register \
+  --name security-auditor \
+  --worktree feature/NNN-security-fix \
+  --capabilities "security,owasp,secrets,vulnerabilities")
+export SECURITY_AUDITOR_ID=$AGENT_ID
+```
+
+### Before Working on Files
+```bash
+# Announce intent (informational - detects overlaps, doesn't lock)
+uam agent announce \
+  --id $AGENT_ID \
+  --resource "src/auth/login.ts" \
+  --intent editing \
+  --description "Fixing SQL injection vulnerability" \
+  --files "src/auth/login.ts,src/auth/utils.ts"
+
+# If overlap detected, you'll see:
+# - Which agents are working on same/related files
+# - Their worktree branches
+# - Conflict risk level (low/medium/high/critical)
+# - Suggested merge order
+```
+
+### Handling Overlaps
+When overlap is detected, consider:
+1. **Low risk**: Proceed - parallel work is fine
+2. **Medium risk**: Agree on merge order with other agent
+3. **High/Critical risk**: 
+   - Coordinate who merges first
+   - Consider splitting work into non-overlapping sections
+   - One agent may wait for other to complete
+
+```bash
+# Check current overlaps anytime
+uam agent overlaps --resource "src/auth/"
+
+# View all active work across agents
+uam agent overlaps
+```
+
+### After Work Complete
+```bash
+# Mark work complete (notifies other agents they can safely merge)
+uam agent complete --id $AGENT_ID --resource "src/auth/login.ts"
+
+# Broadcast findings to other agents
+uam agent broadcast --id $AGENT_ID --channel review \
+  --message '{"action":"security-review-complete","issues":"'$ISSUE_COUNT'"}'
+```
+
+### Before Committing Fixes
+```bash
+# Queue commit for batching (saves CI minutes - multiple commits become one)
+uam deploy queue --agent-id $AGENT_ID --action-type commit --target main \
+  --message "security: fix SQL injection in login" \
+  --files "src/auth/login.ts,src/auth/utils.ts"
+
+# When ready to push, flush all pending deploys
+uam deploy flush
+```
+
+### On Shutdown
+```bash
+uam agent deregister --id $AGENT_ID
+```

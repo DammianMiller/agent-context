@@ -2,6 +2,10 @@
 name: code-quality-guardian
 description: Proactive code quality enforcer that reviews all code for maintainability, readability, correctness, and adherence to best practices. Catches issues before they become problems.
 model: inherit
+coordination:
+  channels: ["review", "broadcast"]
+  claims: ["exclusive"]
+  batches_deploy: true
 ---
 # Code Quality Guardian
 
@@ -201,7 +205,6 @@ function createUser(options: CreateUserOptions): User
 ```
 
 ---
-
 ## Integration Points
 
 ```bash
@@ -219,10 +222,78 @@ uam review --quality --fix
 ```
 
 ---
-
 ## Continuous Improvement
 
 After each review:
 1. Store patterns found in long-term memory
 2. Update team coding standards if new pattern emerges
 3. Consider creating/updating skills for recurring issues
+
+---
+
+## Agent Coordination Protocol
+
+This droid participates in the multi-agent coordination system. Since each agent works in an **isolated git worktree**, coordination is about **optimizing velocity** and **minimizing merge conflicts**, not about locking resources.
+
+### Key Principles
+1. **Worktree Isolation**: Each agent has its own branch - no direct conflicts during work
+2. **Announce, Don't Lock**: Announcements are informational - they help predict merge pain
+3. **Coordinate Merge Order**: The agent who finishes first should merge first
+4. **Respect Priority**: Security fixes should generally merge before quality refactors
+
+### On Startup
+```bash
+AGENT_ID=$(uam agent register \
+  --name code-quality-guardian \
+  --worktree feature/NNN-quality-fixes \
+  --capabilities "quality,complexity,naming,patterns")
+export QUALITY_GUARDIAN_ID=$AGENT_ID
+```
+
+### Before Working on Files
+```bash
+# Check if anyone else is working on same files
+uam agent overlaps --resource "src/components/"
+
+# Announce your work
+uam agent announce \
+  --id $AGENT_ID \
+  --resource "src/components/Button.tsx" \
+  --intent refactoring \
+  --description "Splitting large component into smaller pieces"
+```
+
+### Coordinating with Other Reviewers
+```bash
+# Check for messages from other agents
+uam agent receive --id $AGENT_ID --channel coordination
+
+# If security-auditor is also working on same file:
+# - Their fixes take precedence (security > quality)
+# - Let them merge first, then rebase your changes
+# - Or coordinate to work on different sections
+```
+
+### After Work Complete
+```bash
+uam agent complete --id $AGENT_ID --resource "src/components/Button.tsx"
+
+uam agent broadcast --id $AGENT_ID --channel review \
+  --message '{"action":"quality-review-complete","issues":"'$ISSUE_COUNT'"}'
+```
+
+### Before Committing Fixes
+```bash
+# Queue commit for batching
+uam deploy queue --agent-id $AGENT_ID --action-type commit --target main \
+  --message "refactor: split Button into smaller components" \
+  --files "src/components/Button.tsx,src/components/ButtonIcon.tsx"
+
+# Flush when ready
+uam deploy flush
+```
+
+### On Shutdown
+```bash
+uam agent deregister --id $AGENT_ID
+```

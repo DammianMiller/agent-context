@@ -12,6 +12,10 @@ import { memoryCommand } from '../cli/memory.js';
 import { worktreeCommand } from '../cli/worktree.js';
 import { syncCommand } from '../cli/sync.js';
 import { droidsCommand } from '../cli/droids.js';
+import { coordCommand } from '../cli/coord.js';
+import { agentCommand } from '../cli/agent.js';
+import { deployCommand } from '../cli/deploy.js';
+import { taskCommand } from '../cli/task.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -152,6 +156,279 @@ program
       .description('Import droids from another platform')
       .argument('<path>', 'Path to import from')
       .action((path) => droidsCommand('import', { path }))
+  );
+
+// Agent Coordination Commands
+program
+  .command('coord')
+  .description('Agent coordination and status')
+  .addCommand(
+    new Command('status')
+      .description('Show coordination status (agents, claims, deploys)')
+      .option('-v, --verbose', 'Show detailed information')
+      .action((options) => coordCommand('status', options))
+  )
+  .addCommand(
+    new Command('flush')
+      .description('Force execute all pending deploys')
+      .action((options) => coordCommand('flush', options))
+  )
+  .addCommand(
+    new Command('cleanup')
+      .description('Clean up stale agents and expired data')
+      .action((options) => coordCommand('cleanup', options))
+  );
+
+program
+  .command('agent')
+  .description('Agent lifecycle, work coordination, and communication')
+  .addCommand(
+    new Command('register')
+      .description('Register a new agent (each agent works in isolated worktree)')
+      .option('-n, --name <name>', 'Agent name (required)')
+      .option('-c, --capabilities <caps>', 'Comma-separated capabilities')
+      .option('-w, --worktree <branch>', 'Git worktree branch this agent is using')
+      .action((options) => agentCommand('register', options))
+  )
+  .addCommand(
+    new Command('heartbeat')
+      .description('Send heartbeat for an agent')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .action((options) => agentCommand('heartbeat', options))
+  )
+  .addCommand(
+    new Command('status')
+      .description('Show agent status')
+      .option('-i, --id <id>', 'Agent ID (optional, shows all if omitted)')
+      .action((options) => agentCommand('status', options))
+  )
+  .addCommand(
+    new Command('announce')
+      .description('Announce intent to work on a resource (informational, enables overlap detection)')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .option('-r, --resource <resource>', 'Resource path (file/directory) to work on')
+      .option('--intent <intent>', 'Work intent: editing, reviewing, refactoring, testing, documenting')
+      .option('-d, --description <desc>', 'Description of planned changes')
+      .option('-f, --files <files>', 'Comma-separated list of files that will be affected')
+      .option('--minutes <minutes>', 'Estimated time to complete (in minutes)')
+      .action((options) => agentCommand('announce', options))
+  )
+  .addCommand(
+    new Command('complete')
+      .description('Mark work as complete on a resource (notifies other agents)')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .option('-r, --resource <resource>', 'Resource that work is complete on')
+      .action((options) => agentCommand('complete', options))
+  )
+  .addCommand(
+    new Command('overlaps')
+      .description('Check for overlapping work (merge conflict risk assessment)')
+      .option('-r, --resource <resource>', 'Resource to check (omit to show all active work)')
+      .action((options) => agentCommand('overlaps', options))
+  )
+  .addCommand(
+    new Command('broadcast')
+      .description('Broadcast a message to all agents')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .option('-c, --channel <channel>', 'Channel: broadcast, deploy, review, coordination')
+      .option('-m, --message <message>', 'Message payload (JSON or string)')
+      .option('-p, --priority <priority>', 'Priority 1-10', '5')
+      .action((options) => agentCommand('broadcast', options))
+  )
+  .addCommand(
+    new Command('send')
+      .description('Send a direct message to another agent')
+      .option('-i, --id <id>', 'Sender agent ID (required)')
+      .option('-t, --to <to>', 'Recipient agent ID (required)')
+      .option('-m, --message <message>', 'Message payload (JSON or string)')
+      .option('-p, --priority <priority>', 'Priority 1-10', '5')
+      .action((options) => agentCommand('send', options))
+  )
+  .addCommand(
+    new Command('receive')
+      .description('Receive pending messages')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .option('-c, --channel <channel>', 'Filter by channel')
+      .option('--no-mark-read', 'Do not mark messages as read')
+      .action((options) => agentCommand('receive', options))
+  )
+  .addCommand(
+    new Command('deregister')
+      .description('Deregister an agent')
+      .option('-i, --id <id>', 'Agent ID (required)')
+      .action((options) => agentCommand('deregister', options))
+  );
+
+program
+  .command('deploy')
+  .description('Deployment batching and execution')
+  .addCommand(
+    new Command('queue')
+      .description('Queue a deploy action for batching')
+      .option('-a, --agent-id <id>', 'Agent ID (required)')
+      .option('-t, --action-type <type>', 'Action type: commit, push, merge, deploy, workflow')
+      .option('--target <target>', 'Target (branch, environment, workflow name)')
+      .option('-m, --message <message>', 'Commit message (for commit action)')
+      .option('-f, --files <files>', 'Comma-separated files (for commit action)')
+      .option('-r, --remote <remote>', 'Git remote (for push action)', 'origin')
+      .option('--force', 'Force push (for push action)')
+      .option('--ref <ref>', 'Git ref (for workflow action)')
+      .option('--inputs <inputs>', 'Workflow inputs as JSON (for workflow action)')
+      .option('-p, --priority <priority>', 'Priority 1-10', '5')
+      .action((options) => deployCommand('queue', options))
+  )
+  .addCommand(
+    new Command('batch')
+      .description('Create a batch from pending deploy actions')
+      .option('-v, --verbose', 'Show detailed batch info')
+      .action((options) => deployCommand('batch', options))
+  )
+  .addCommand(
+    new Command('execute')
+      .description('Execute a deploy batch')
+      .option('-b, --batch-id <id>', 'Batch ID (required)')
+      .option('--dry-run', 'Show what would be executed without running')
+      .action((options) => deployCommand('execute', options))
+  )
+  .addCommand(
+    new Command('status')
+      .description('Show deploy queue status')
+      .option('-v, --verbose', 'Show detailed status')
+      .action((options) => deployCommand('status', options))
+  )
+  .addCommand(
+    new Command('flush')
+      .description('Flush all pending deploys (batch and execute)')
+      .option('-v, --verbose', 'Show detailed results')
+      .option('--dry-run', 'Show what would be executed without running')
+      .action((options) => deployCommand('flush', options))
+  );
+
+// Task Management
+program
+  .command('task')
+  .description('Task management (superior alternative to Beads)')
+  .addCommand(
+    new Command('create')
+      .description('Create a new task')
+      .option('-t, --title <title>', 'Task title (required)')
+      .option('-d, --description <desc>', 'Task description')
+      .option('--type <type>', 'Type: task, bug, feature, epic, chore, story', 'task')
+      .option('-p, --priority <priority>', 'Priority: 0-4 (P0=critical, P4=backlog)', '2')
+      .option('-l, --labels <labels>', 'Comma-separated labels')
+      .option('--parent <parent>', 'Parent task ID (for hierarchy)')
+      .option('-n, --notes <notes>', 'Markdown notes')
+      .option('--json', 'Output as JSON')
+      .action((options) => taskCommand('create', options))
+  )
+  .addCommand(
+    new Command('list')
+      .description('List tasks')
+      .option('-s, --filter-status <status>', 'Filter by status (comma-separated)')
+      .option('--filter-type <type>', 'Filter by type (comma-separated)')
+      .option('--filter-priority <priority>', 'Filter by priority (comma-separated)')
+      .option('-a, --filter-assignee <assignee>', 'Filter by assignee')
+      .option('-l, --filter-labels <labels>', 'Filter by labels (comma-separated)')
+      .option('--search <search>', 'Search in title/description')
+      .option('--show-blocked', 'Show only blocked tasks')
+      .option('--show-ready', 'Show only ready tasks')
+      .option('-v, --verbose', 'Show more details')
+      .option('--json', 'Output as JSON')
+      .action((options) => taskCommand('list', options))
+  )
+  .addCommand(
+    new Command('show')
+      .description('Show task details')
+      .argument('<id>', 'Task ID')
+      .option('-v, --verbose', 'Show history')
+      .option('--json', 'Output as JSON')
+      .action((id, options) => taskCommand('show', { id, ...options }))
+  )
+  .addCommand(
+    new Command('update')
+      .description('Update a task')
+      .argument('<id>', 'Task ID')
+      .option('-t, --title <title>', 'New title')
+      .option('-d, --description <desc>', 'New description')
+      .option('--type <type>', 'New type')
+      .option('-s, --status <status>', 'New status: open, in_progress, blocked, done, wont_do')
+      .option('-p, --priority <priority>', 'New priority (0-4)')
+      .option('-a, --assignee <assignee>', 'Assign to agent (use "none" to unassign)')
+      .option('-w, --worktree <worktree>', 'Set worktree branch')
+      .option('-l, --labels <labels>', 'New labels (comma-separated)')
+      .option('-n, --notes <notes>', 'New notes')
+      .action((id, options) => taskCommand('update', { id, ...options }))
+  )
+  .addCommand(
+    new Command('close')
+      .description('Close a task (mark as done)')
+      .argument('<id>', 'Task ID')
+      .option('-r, --reason <reason>', 'Closure reason')
+      .action((id, options) => taskCommand('close', { id, ...options }))
+  )
+  .addCommand(
+    new Command('delete')
+      .description('Delete a task')
+      .argument('<id>', 'Task ID')
+      .action((id) => taskCommand('delete', { id }))
+  )
+  .addCommand(
+    new Command('ready')
+      .description('List tasks ready to work on (no blockers)')
+      .option('--json', 'Output as JSON')
+      .action((options) => taskCommand('ready', options))
+  )
+  .addCommand(
+    new Command('blocked')
+      .description('List blocked tasks')
+      .option('--json', 'Output as JSON')
+      .action((options) => taskCommand('blocked', options))
+  )
+  .addCommand(
+    new Command('dep')
+      .description('Add a dependency between tasks')
+      .option('-f, --from <from>', 'Dependent task (the task that is blocked)')
+      .option('-t, --to <to>', 'Blocking task (the task that must complete first)')
+      .option('--dep-type <type>', 'Dependency type: blocks, related, discovered_from', 'blocks')
+      .action((options) => taskCommand('dep', options))
+  )
+  .addCommand(
+    new Command('undep')
+      .description('Remove a dependency between tasks')
+      .option('-f, --from <from>', 'Dependent task')
+      .option('-t, --to <to>', 'Blocking task')
+      .action((options) => taskCommand('undep', options))
+  )
+  .addCommand(
+    new Command('claim')
+      .description('Claim a task (assign + announce work + create worktree)')
+      .argument('<id>', 'Task ID')
+      .option('-b, --branch <branch>', 'Worktree branch name')
+      .action((id, options) => taskCommand('claim', { id, ...options }))
+  )
+  .addCommand(
+    new Command('release')
+      .description('Release a task (mark complete + announce)')
+      .argument('<id>', 'Task ID')
+      .option('-r, --reason <reason>', 'Completion reason')
+      .action((id, options) => taskCommand('release', { id, ...options }))
+  )
+  .addCommand(
+    new Command('stats')
+      .description('Show task statistics')
+      .option('--json', 'Output as JSON')
+      .action((options) => taskCommand('stats', options))
+  )
+  .addCommand(
+    new Command('sync')
+      .description('Sync tasks with JSONL file (for git versioning)')
+      .action((options) => taskCommand('sync', options))
+  )
+  .addCommand(
+    new Command('compact')
+      .description('Compact old closed tasks into summaries')
+      .option('--days <days>', 'Compact tasks older than N days', '90')
+      .action((options) => taskCommand('compact', options))
   );
 
 program

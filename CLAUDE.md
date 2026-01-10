@@ -4,7 +4,50 @@
   This template is the master source for generating project-specific CLAUDE.md files.
   It provides autonomous AI agent operation with full memory system, worktrees, and skills.
   
-  All variables are populated by the generator from project analysis.
+  All variables are populated by the UAM generator from project analysis.
+  
+  Template Variables:
+  ==================
+  Core:
+    universal-agent-memory          - Name of the project (from package.json or git)
+    main        - Main branch name (main/master)
+    January 2026        - Date of last structure update
+  
+  Memory System:
+    ./agents/data/memory/short_term.db        - Path to SQLite short-term memory
+    uam memory query      - Command to query long-term memory
+    uam memory store      - Command to store long-term memory
+    uam memory start      - Command to start memory services
+    uam memory status     - Command to check memory status
+    uam memory stop       - Command to stop memory services
+    Qdrant     - Backend type (Qdrant/Chroma/etc)
+    localhost:6333    - Backend endpoint
+    agent_memory  - Collection name
+    50      - Max short-term entries
+  
+  Worktree:
+    uam worktree create   - Command to create worktree
+    uam worktree pr       - Command to create PR
+    uam worktree cleanup  - Command to cleanup worktree
+    .worktrees          - Worktree directory path
+    Application code, configs, workflows, documentation, CLAUDE.md itself   - What worktrees apply to
+    feature/         - Branch prefix (feature/)
+  
+  Paths:
+    .factory/skills/           - Path to skills directory
+    .factory/droids/           - Path to droids directory
+    .factory/commands/         - Path to commands directory
+    docs             - Path to documentation
+    agents/data/screenshots      - Path for browser screenshots
+    agents/docker-compose.yml   - Path to docker-compose.yml
+  
+  Commands:
+    npm test          - Command to run tests
+         - Command to install git hooks
+  
+  Optional Sections (Handlebars conditionals):
+    
+       - Triple braces for multiline
 -->
 
 <coding_guidelines>
@@ -16,7 +59,7 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 
 ---
 
-## ⚠️⚠️⚠️ CRITICAL: READ THIS FIRST - EVERY SINGLE TIME ⚠️⚠️⚠️
+## CRITICAL: READ THIS FIRST - EVERY SINGLE TIME
 
 **YOU MUST FOLLOW THE DECISION LOOP BELOW FOR EVERY ACTION. NO EXCEPTIONS.**
 
@@ -67,7 +110,7 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 
 ---
 
-## ⛔ MANDATORY RULES - ZERO TOLERANCE ⛔
+## MANDATORY RULES - ZERO TOLERANCE
 
 **FAILURE TO FOLLOW THESE RULES IS A CRITICAL ERROR. STOP AND RE-READ IF UNSURE.**
 
@@ -128,11 +171,11 @@ uam memory store lesson "What you learned" --tags tag1,tag2 --importance 7
 
 **Before starting ANY implementation, check if a skill applies:**
 
-| Task Type                                         | Required Skill              |
-| ------------------------------------------------- | --------------------------- |
-| React/TypeScript/Frontend                         | `senior-frontend`           |
-| Code review                                       | `code-reviewer`             |
-| Web testing                                       | `webapp-testing`            |
+| Task Type | Required Skill |
+| --------- | -------------- |
+| React/TypeScript/Frontend | `senior-frontend` |
+| Code review | `code-reviewer` |
+| Web testing | `webapp-testing` |
 
 ```bash
 # Invoke skill FIRST, then follow its guidance
@@ -166,75 +209,322 @@ Before sending ANY response, verify:
 
 ---
 
-## MEMORY SYSTEM
+## MEMORY SYSTEM (4-Layer Architecture)
 
-### Short-term Memory (SQLite: `./agents/data/memory/short_term.db`)
+> **Architecture Note**: This system is based on research into MemGPT, Mem0, A-MEM, LangGraph, and
+> industry best practices for agentic memory systems.
 
-Table: `memories`
+### Architecture Overview
 
-- `id`: INTEGER PRIMARY KEY
-- `timestamp`: TEXT (ISO8601)
-- `type`: TEXT (action|observation|thought|goal)
-- `content`: TEXT
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    FOUR-LAYER MEMORY ARCHITECTURE                   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  LAYER 1: WORKING MEMORY (SQLite)           ~0.15ms access          │
+│  ├─ 50 entries max, FIFO eviction                 │
+│  ├─ Types: action, observation, thought, goal                       │
+│  └─ Immediate context for current task                              │
+│                                                                     │
+│  LAYER 2: SESSION MEMORY (SQLite)           ~0.2ms access           │
+│  ├─ Session-scoped summaries and decisions                          │
+│  ├─ Entities mentioned with context                                 │
+│  └─ Cleaned on session end (optional persistence)                   │
+│                                                                     │
+│  LAYER 3: SEMANTIC MEMORY (Qdrant)  ~1-2ms search    │
+│  ├─ Vector embeddings (384-dim all-MiniLM-L6-v2)                    │
+│  ├─ Importance scoring with time-based decay                        │
+│  └─ Deduplication via content hash + similarity                     │
+│                                                                     │
+│  LAYER 4: KNOWLEDGE GRAPH (SQLite)          ~0.17ms query           │
+│  ├─ Entities: files, functions, concepts, errors, configs           │
+│  ├─ Relationships: depends_on, fixes, causes, related_to            │
+│  └─ Multi-hop traversal for complex reasoning                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-**BEFORE EACH DECISION**: Query recent entries (last 50) to understand your context
+### Installation & Setup
+
+```bash
+# 1. Install UAM globally or in project
+npm install -g universal-agent-memory
+# or
+npm install --save-dev universal-agent-memory
+
+# 2. Initialize in your project
+uam init
+
+# 3. Start memory services (Qdrant for vector search)
+uam memory start
+
+# 4. Generate CLAUDE.md with memory integration
+uam generate
+
+# 5. Verify setup
+uam memory status
+```
+
+### Layer 1: Working Memory (SQLite)
+
+**Location**: `./agents/data/memory/short_term.db`
+
+**Table: `memories`**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key, auto-increment |
+| `timestamp` | TEXT | ISO8601 timestamp |
+| `type` | TEXT | action, observation, thought, goal |
+| `content` | TEXT | Memory content |
+
+**BEFORE EACH DECISION**: Query recent entries
 
 ```sql
 SELECT * FROM memories ORDER BY id DESC LIMIT 50;
 ```
 
-**AFTER EACH ACTION**: INSERT a new row describing what you did and the outcome
+**AFTER EACH ACTION**: Record what you did
 
 ```sql
-INSERT INTO memories (timestamp, type, content) VALUES (datetime('now'), 'action', 'Description of action and result');
+INSERT INTO memories (timestamp, type, content)
+VALUES (datetime('now'), 'action', 'Description of action and result');
+```
+
+**Or use the CLI:**
+
+```bash
+uam memory add --type action "Implemented user authentication with JWT"
 ```
 
 Maintains last 50 entries - older entries auto-deleted via trigger.
 
-### Long-term Memory (Qdrant: `localhost:6333`, collection: `agent_memory`)
+### Layer 2: Session Memory (SQLite)
 
-**Start services**: `uam memory start`
+**Table: `session_memories`** (in same database as working memory)
 
-Vector schema:
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key |
+| `session_id` | TEXT | Current session identifier |
+| `timestamp` | TEXT | ISO8601 timestamp |
+| `type` | TEXT | summary, decision, entity, error |
+| `content` | TEXT | Memory content |
+| `importance` | INTEGER | 1-10 importance score |
 
-- `id`: UUID
-- `vector`: 384-dim embedding (all-MiniLM-L6-v2)
-- `payload`: {type, tags[], content, importance (1-10), timestamp}
+**Query session context:**
+
+```sql
+SELECT * FROM session_memories
+WHERE session_id = 'current_session'
+ORDER BY id DESC LIMIT 10;
+```
+
+**Store session decision:**
+
+```sql
+INSERT INTO session_memories (session_id, timestamp, type, content, importance)
+VALUES ('current_session', datetime('now'), 'decision', 'Chose approach X because...', 7);
+```
+
+**Types**: summary, decision, entity, error
+
+### Layer 3: Semantic Memory (Qdrant)
+
+**Collection**: `agent_memory` at `localhost:6333`
+
+**Vector Schema**:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | UUID | Unique identifier |
+| `vector` | float[384] | Embedding (all-MiniLM-L6-v2) |
+| `content` | string | Original memory text |
+| `type` | string | lesson, bug-fix, architecture, gotcha |
+| `tags` | string[] | Categorization tags |
+| `importance` | int | 1-10 importance score |
+| `timestamp` | string | ISO8601 creation time |
+| `decay_score` | float | Time-based decay factor |
+| `content_hash` | string | MD5 hash for deduplication |
 
 **Query memories** (semantic search):
 
 ```bash
 uam memory query "<search terms>"
+
+# Examples:
+uam memory query "authentication JWT token"
+uam memory query "database connection pooling"
+uam memory query "React state management"
 ```
 
-**Store new memory**:
+**Store new memory** (importance 7+ recommended):
 
 ```bash
 uam memory store lesson "What you learned" --tags tag1,tag2 --importance 8
+
+# Examples:
+uam memory store lesson "Always check network policies before deploying" --tags kubernetes,networking --importance 8
+uam memory store bug-fix "Connection timeout was caused by missing egress rule" --tags networking,debugging --importance 9
+uam memory store architecture "Chose Redis for caching due to sub-ms latency requirements" --tags caching,performance --importance 7
 ```
 
-**WHEN TO READ**: Search for memories relevant to current task/decision
-**WHEN TO WRITE**: Only store significant learnings:
+**Decay Formula**: `effective_importance = importance * (0.95 ^ days_since_access)`
 
-- Discoveries about your environment/capabilities
-- Successful strategies that worked
-- Failed approaches to avoid repeating
-- Important facts learned
-- Skills or tools mastered
+**WHEN TO STORE IN SEMANTIC MEMORY** (importance 7+):
+
+- ✅ Bug fixes with root cause + solution
+- ✅ Architecture decisions with rationale
+- ✅ Performance optimizations that worked
+- ✅ Gotchas and workarounds discovered
+- ✅ API behaviors that aren't obvious
+- ❌ Routine actions (keep in working memory)
+- ❌ Temporary context (keep in session memory)
+
+**Deduplication Strategy**:
+
+1. Compute content hash (MD5 first 16 chars)
+2. If hash exists, skip (fast path)
+3. If unsure, check semantic similarity (threshold 0.92)
+4. Only add if truly new information
+
+### Layer 4: Knowledge Graph (SQLite)
+
+**Tables**: `entities` and `relationships` (in same database)
+
+**Entities Table:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key |
+| `type` | TEXT | file, function, concept, error, config, service |
+| `name` | TEXT | Entity name/identifier |
+| `first_seen` | TEXT | First mention timestamp |
+| `last_seen` | TEXT | Last mention timestamp |
+| `mention_count` | INTEGER | How often referenced |
+
+**Relationships Table:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key |
+| `source_id` | INTEGER | Source entity ID |
+| `target_id` | INTEGER | Target entity ID |
+| `relation` | TEXT | depends_on, fixes, causes, related_to, contains, implements |
+| `timestamp` | TEXT | When relationship was established |
+
+**Query related entities (1-hop):**
+
+```sql
+SELECT e.*, r.relation, e2.name as related
+FROM entities e
+LEFT JOIN relationships r ON e.id = r.source_id
+LEFT JOIN entities e2 ON r.target_id = e2.id
+WHERE e.name LIKE '%api%';
+```
+
+**Add entity:**
+
+```sql
+INSERT OR REPLACE INTO entities (type, name, first_seen, last_seen, mention_count)
+VALUES ('file', 'auth-controller.ts', datetime('now'), datetime('now'), 1);
+```
+
+**Add relationship:**
+
+```sql
+INSERT INTO relationships (source_id, target_id, relation, timestamp)
+VALUES (1, 2, 'depends_on', datetime('now'));
+```
+
+**Or use the CLI:**
+
+```bash
+uam memory entity add --type file --name "auth-controller.ts"
+uam memory relation add --source "auth-controller.ts" --target "jwt-utils.ts" --relation depends_on
+```
+
+### Memory Operations Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MEMORY OPERATION FLOW                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ON TASK START:                                                 │
+│  1. Query working memory (last 20 entries)                      │
+│  2. Query semantic memory for relevant context                  │
+│  3. Check knowledge graph for related entities                  │
+│                                                                 │
+│  DURING TASK:                                                   │
+│  4. Update working memory after each action                     │
+│  5. Store key decisions in session memory                       │
+│                                                                 │
+│  ON SIGNIFICANT LEARNING:                                       │
+│  6. Store in semantic memory (importance 7+)                    │
+│  7. Update knowledge graph entities/relationships               │
+│                                                                 │
+│  ON CONSOLIDATION TRIGGER (every 10 working memory entries):    │
+│  8. Summarize working memory → session memory                   │
+│  9. Extract high-importance items → semantic memory             │
+│  10. Deduplicate using content hash (fast) + similarity (slow)  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ### Agent Services Setup
 
 ```bash
-# Start Qdrant (auto-creates collection and migrates memories)
+# Start all memory services (Qdrant for vectors, auto-creates collections)
 uam memory start
 
-# Check status
+# Check service status
 uam memory status
 
 # Stop services
 uam memory stop
+
+# Upgrade SQLite schema (adds session memory + knowledge graph tables)
+uam memory migrate
+
+# Backup all memories
+uam memory backup
+
+# Export memories to JSON
+uam memory export --format json memories-backup.json
 ```
 
+**Docker Compose**: `agents/docker-compose.yml` defines Qdrant with persistent storage.
+
+```yaml
+# Example docker-compose.yml for memory services
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+```
+
+### Performance Benchmarks
+
+| Operation | Latency | Throughput |
+|-----------|---------|------------|
+| SQLite INSERT | ~1.1ms | 875 ops/sec |
+| SQLite SELECT (50 rows) | ~0.15ms | 6,680 ops/sec |
+| SQLite Graph Query (1-hop) | ~0.17ms | 6,035 ops/sec |
+| Qdrant Search (top-5) | ~1.2ms | 818 ops/sec |
+| Embedding Generation | ~3.3ms | 305 ops/sec |
+
+### Importance Scale Reference
+
+| Score | Category | Examples |
+|-------|----------|----------|
+| 9-10 | Critical system knowledge | Auth flows, data models, breaking changes |
+| 7-8 | Important patterns and fixes | Bug fixes, performance optimizations |
+| 5-6 | Useful context and learnings | Code patterns, tool configurations |
+| 3-4 | Minor observations | Style preferences, minor quirks |
 
 ---
 
@@ -279,7 +569,7 @@ Available skills are auto-discovered. When you see a SKILL.md, follow its instru
 
 ---
 
-**MANDATORY WORKFLOW REQUIREMENTS**:
+## MANDATORY WORKFLOW REQUIREMENTS
 
 1. **Git Worktrees**: ALL code changes MUST use isolated git worktrees (`feature/NNN-slug` branches)
 2. **PR-Based Merges**: NO direct commits to `main`. All changes via PR with automated review
@@ -293,7 +583,33 @@ Available skills are auto-discovered. When you see a SKILL.md, follow its instru
 
 ```
 universal-agent-memory/
-
+├── src/                           # Source code
+│   ├── analyzers/                 
+│   ├── bin/                       
+│   ├── cli/                       
+│   ├── generators/                
+│   ├── memory/                    
+│   ├── types/                     
+│   ├── utils/                     
+│   └── worktree/                  
+│
+├── tools/                         # Development tools
+│   └── agents/                    
+│
+├── scripts/                       # Automation scripts
+│
+├── docs/                          # Documentation
+│   └── research/                  
+│
+├── .factory/                      # Factory AI configuration
+│   ├── commands/                  # CLI commands
+│   ├── droids/                    # Custom AI agents
+│   ├── scripts/                   # Automation scripts
+│   ├── skills/                    # Reusable skills
+│   └── templates/                 
+│
+├── .github/                       # GitHub configuration
+│   └── workflows/                 # CI/CD pipelines
 ```
 
 ---
@@ -396,6 +712,12 @@ npm run build
 
 | Symptom | Solution |
 |---------|----------|
+| """
+    # Group by type
+    actions = [e for e in short_term... | See memory for details |
+| **Semantic Memory** (Qdrant: `claude_memory` collection)
+
+  ... | See memory for details |
 | fix: read version from package | json instead of hardcoding|- CLI now dynamically reads versi |
 | fix: improve install scripts with GitHub fallback and add npm publish workflow|- Install scripts now fall back to cloning from GitHub if npm package unavailable | - Install to ~/.universal-agent-memory for persistent instal |
 | fix: update URLs to use raw GitHub URLs and fix npm publishing|- Replace non-existent universal-agent-memory | dev URLs with raw GitHub URLs. - Add publishConfig for npm p |
@@ -407,6 +729,11 @@ npm run build
 | File | Purpose |
 | ---- | ------- |
 | `README.md` | Project documentation |
+| `.uam.json` | UAM agent memory configuration |
+| `package.json` | Node.js project configuration |
+| `tsconfig.json` | TypeScript configuration |
+| `.gitignore` | Git ignore patterns |
+| `.prettierrc` | Prettier configuration |
 
 ---
 
@@ -425,7 +752,7 @@ npm run build
 
 ## Augmented Agent Capabilities
 
-### ⚡ PROACTIVE Skills & Droids - INVOKE AUTOMATICALLY
+### Proactive Skills & Droids - INVOKE AUTOMATICALLY
 
 **These must be invoked WITHOUT being asked - they ensure quality, security, and performance:**
 
@@ -466,7 +793,7 @@ Invoke with `Skill` tool. Skills expand inline with detailed instructions.
 
 Launch via `Task` tool with `subagent_type`. Droids run autonomously.
 
-**⚡ PROACTIVE Quality Droids (Run before EVERY commit/PR):**
+**Proactive Quality Droids (Run before EVERY commit/PR):**
 | Droid | Focus | When to Invoke |
 |-------|-------|----------------|
 | `code-quality-guardian` | Complexity, naming, SOLID, code smells | **PROACTIVE** - All code changes |
@@ -502,14 +829,14 @@ Launch via `Task` tool with `subagent_type`. Droids run autonomously.
 
 High-level orchestration workflows:
 
-| Command          | Purpose                                                                       |
-| ---------------- | ----------------------------------------------------------------------------- |
-| `/worktree`      | Manage git worktrees (create, list, pr, cleanup) - **USE FOR ALL CHANGES**    |
-| `/code-review`   | Full code review (git-summarizer → quality/security/perf/test/docs reviewers) |
-| `/pr-ready`      | Validate branch, auto-create PR, trigger reviewer agents                      |
-| `/release-notes` | Generate structured release notes from changes                                |
-| `/test-plan`     | Produce test plans for code changes                                           |
-| `/todo-scan`     | Scan for TODO/FIXME markers                                                   |
+| Command | Purpose |
+| ------- | ------- |
+| `/worktree` | Manage git worktrees (create, list, pr, cleanup) - **USE FOR ALL CHANGES** |
+| `/code-review` | Full code review (git-summarizer → quality/security/perf/test/docs reviewers) |
+| `/pr-ready` | Validate branch, auto-create PR, trigger reviewer agents |
+| `/release-notes` | Generate structured release notes from changes |
+| `/test-plan` | Produce test plans for code changes |
+| `/todo-scan` | Scan for TODO/FIXME markers |
 
 
 ### Usage Patterns
@@ -609,7 +936,7 @@ This will:
 
 ### Hot Spots (Frequently Modified Files)
 
-Frequently modified files (hot spots): package.json (7 changes), src/generators/claude-md.ts (6 changes), package-lock.json (5 changes), README.md (5 changes), scripts/install-desktop.sh (5 changes), web/generator.html (5 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (9 changes), src/generators/claude-md.ts (8 changes), package-lock.json (7 changes), templates/CLAUDE.template.md (5 changes), README.md (5 changes), scripts/install-desktop.sh (5 changes), web/generator.html (5 changes). These files may need extra attention during changes.
 
 
 </coding_guidelines>

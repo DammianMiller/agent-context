@@ -1,9 +1,9 @@
 {
-  "$schema": "https://agent-context.dev/schema.json",
+  "$schema": "https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/schema.json",
   "version": "1.0.0",
   "project": {
-    "name": "@agent-context/cli",
-    "description": "Universal AI agent context system - CLAUDE.md templates, memory, worktrees for Claude Code, Factory.AI, VSCode, OpenCode",
+    "name": "universal-agent-memory",
+    "description": "Universal AI agent memory system - CLAUDE.md templates, memory, worktrees for Claude Code, Factory.AI, VSCode, OpenCode",
     "defaultBranch": "main"
   },
   "platforms": {

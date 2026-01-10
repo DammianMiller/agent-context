@@ -2,6 +2,10 @@
 name: performance-optimizer
 description: Proactive performance analyst that identifies bottlenecks, memory leaks, slow algorithms, and optimization opportunities. Ensures code runs efficiently at scale.
 model: inherit
+coordination:
+  channels: ["review", "broadcast"]
+  claims: ["shared"]
+  batches_deploy: true
 ---
 # Performance Optimizer
 
@@ -244,7 +248,6 @@ await pipeline(
 ```
 
 ---
-
 ## Performance Metrics
 
 ### Critical Thresholds
@@ -279,7 +282,6 @@ console.log(`Memory used: ${(after - before) / 1024 / 1024}MB`);
 ```
 
 ---
-
 ## Review Output Format
 
 ```markdown
