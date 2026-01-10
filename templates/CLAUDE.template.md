@@ -72,39 +72,47 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 │                     (Execute this for EVERY task)                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  1. READ MEMORY FIRST                                                        │
+│  1. CREATE/CLAIM TASK FIRST                                                  │
+│     ├─ Check existing: uam task list --show-ready                           │
+│     ├─ Create if needed: uam task create --title "..." --type task          │
+│     ├─ Claim it: uam task claim <id>                                        │
+│     └─ This announces work and detects overlaps automatically               │
+│                                                                              │
+│  2. READ MEMORY                                                              │
 │     ├─ Query short-term: sqlite3 {{MEMORY_DB_PATH}}                         │
 │     │    "SELECT * FROM memories ORDER BY id DESC LIMIT 20;"                │
 │     └─ Query long-term for relevant context:                                 │
 │          {{MEMORY_QUERY_CMD}} "<keywords related to current task>"          │
 │                                                                              │
-│  2. CHECK FOR APPLICABLE SKILLS                                              │
+│  3. CHECK FOR APPLICABLE SKILLS                                              │
 │     ├─ Review {{SKILLS_PATH}} for relevant skills                           │
 {{#if PRIMARY_SKILLS}}
 {{{PRIMARY_SKILLS}}}
 {{/if}}
 │     └─ Invoke skill BEFORE starting implementation                          │
 │                                                                              │
-│  3. CREATE WORKTREE (for ANY code changes)                                   │
+│  4. CREATE WORKTREE (for ANY code changes)                                   │
 │     ├─ {{WORKTREE_CREATE_CMD}} <slug>                                       │
 │     ├─ cd {{WORKTREE_DIR}}/NNN-<slug>/                                      │
 │     └─ NEVER commit directly to {{DEFAULT_BRANCH}}                          │
 │                                                                              │
-│  4. CREATE TODO LIST (for 3+ step tasks)                                     │
+│  5. CREATE TODO LIST (for 3+ step tasks)                                     │
 │     ├─ Use TodoWrite tool immediately                                        │
 │     ├─ Update status after EACH step                                         │
 │     └─ Mark completed items immediately                                      │
 │                                                                              │
-│  5. DO THE WORK                                                              │
+│  6. DO THE WORK                                                              │
 │     ├─ Implement changes                                                     │
 │     ├─ Run tests                                                             │
 │     └─ Create PR via {{WORKTREE_PR_CMD}} <id>                               │
 │                                                                              │
-│  6. UPDATE MEMORY (after EVERY significant action)                           │
+│  7. UPDATE MEMORY (after EVERY significant action)                           │
 │     ├─ Short-term: INSERT INTO memories...                                   │
 │     └─ Long-term (for learnings): {{MEMORY_STORE_CMD}} lesson...            │
 │                                                                              │
-│  7. VERIFY BEFORE RESPONDING                                                 │
+│  8. RELEASE TASK & VERIFY                                                    │
+│     ├─ Release: uam task release <id> --reason "Completed: ..."             │
+│     ├─ [ ] Task released?                                                    │
 │     ├─ [ ] Memory updated?                                                   │
 │     ├─ [ ] Worktree used?                                                    │
 │     ├─ [ ] PR created (not direct commit)?                                   │
@@ -119,6 +127,68 @@ You are Autonomous Claude, a self-directed AI agent with full control over this 
 ## MANDATORY RULES - ZERO TOLERANCE
 
 **FAILURE TO FOLLOW THESE RULES IS A CRITICAL ERROR. STOP AND RE-READ IF UNSURE.**
+
+### 0. TASK MANAGEMENT REQUIREMENT (USE FOR ALL WORK)
+
+**ALL work MUST be tracked as tasks. This is not optional.**
+
+```
+❌ FORBIDDEN: Starting work without creating a task first
+❌ FORBIDDEN: Working on multiple tasks simultaneously without tracking
+❌ FORBIDDEN: Closing tasks without proper completion
+✅ REQUIRED: Create task → Claim task → Do work → Release task
+```
+
+**Before ANY work:**
+
+```bash
+# Step 1: Create a task (or find existing one)
+uam task create --title "Description of work" --type task --priority 2
+
+# Step 2: Check for blockers
+uam task show <id>                    # View task details
+uam task ready                        # List tasks ready to work on
+
+# Step 3: Claim the task (assigns, announces, detects overlaps)
+uam task claim <id>
+
+# Step 4: Do the work (see worktree workflow below)
+
+# Step 5: Release the task when complete
+uam task release <id> --reason "Completed: description of what was done"
+```
+
+**Task Types:**
+| Type | When to Use |
+|------|-------------|
+| `bug` | Fixing something broken |
+| `task` | General work item |
+| `feature` | New functionality |
+| `chore` | Maintenance, refactoring |
+| `epic` | Large multi-task effort |
+| `story` | User-facing feature |
+
+**Priority Levels (P0 = highest):**
+| Priority | Meaning | Response Time |
+|----------|---------|---------------|
+| P0 | Critical | Immediate |
+| P1 | High | Same day |
+| P2 | Medium | This week |
+| P3 | Low | When available |
+| P4 | Backlog | Future |
+
+**Task Dependencies:**
+
+```bash
+# Add dependency (task A blocks task B)
+uam task dep --from <blocked-task> --to <blocking-task>
+
+# View blocked tasks
+uam task blocked
+
+# View ready tasks (no blockers)
+uam task ready
+```
 
 ### 1. WORKTREE REQUIREMENT (NO EXCEPTIONS)
 
@@ -198,7 +268,45 @@ Skill(skill: "skill-name")
 - Never let todos go stale (update every 5-10 tool calls)
 - Use TodoWrite tool, not manual tracking
 
-### 5. VERIFICATION BEFORE EVERY RESPONSE
+### 5. AGENT COORDINATION REQUIREMENT (MULTI-AGENT ENVIRONMENTS)
+
+**When working in multi-agent environments, coordination is MANDATORY.**
+
+```bash
+# Register as an agent at session start
+uam agent register --name "agent-name" --capabilities "coding,review"
+
+# Before starting work on any resource, announce your intent
+uam agent announce --id <agent-id> --resource "src/auth/" --intent editing \
+  --description "Refactoring authentication module"
+
+# Check for overlapping work (merge conflict prevention)
+uam agent overlaps --resource "src/auth/"
+
+# When work is complete, notify others
+uam agent complete --id <agent-id> --resource "src/auth/"
+```
+
+**Overlap Detection:**
+- System automatically detects when multiple agents work on overlapping files
+- Conflict risk levels: `none`, `low`, `medium`, `high`, `critical`
+- Suggestions provided for merge order and parallel work
+
+**Deploy Batching (for CI/CD efficiency):**
+
+```bash
+# Queue commits for batching (saves CI minutes)
+uam deploy queue --agent-id <id> --action-type commit \
+  --message "feat: add feature" --files "src/feature.ts"
+
+# View pending deploys
+uam deploy status
+
+# Batch and execute all pending deploys
+uam deploy flush
+```
+
+### 6. VERIFICATION BEFORE EVERY RESPONSE
 
 Before sending ANY response, verify:
 
@@ -206,13 +314,17 @@ Before sending ANY response, verify:
 ┌─────────────────────────────────────────────────────────────┐
 │ CHECKLIST - Complete before responding:                     │
 ├─────────────────────────────────────────────────────────────┤
+│ [ ] Task created/claimed for this work?                     │
 │ [ ] Read memory at start of task?                           │
 │ [ ] Checked for applicable skills?                          │
+│ [ ] Announced work (multi-agent)?                           │
+│ [ ] Checked for overlaps (multi-agent)?                     │
 │ [ ] Used worktree for code changes?                         │
 │ [ ] Updated short-term memory after actions?                │
 │ [ ] Stored learnings in long-term memory?                   │
 │ [ ] Updated todo list status?                               │
 │ [ ] Created PR (not direct commit)?                         │
+│ [ ] Released task when complete?                            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -536,6 +648,257 @@ services:
 | 7-8 | Important patterns and fixes | Bug fixes, performance optimizations |
 | 5-6 | Useful context and learnings | Code patterns, tool configurations |
 | 3-4 | Minor observations | Style preferences, minor quirks |
+
+---
+
+## TASK MANAGEMENT SYSTEM
+
+> **Superior to Beads**: Integrated task management with memory, coordination, and deploy batching.
+
+### Task Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           TASK LIFECYCLE                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  CREATE           CLAIM              WORK               RELEASE              │
+│  ──────►          ──────►            ──────►            ──────►              │
+│                                                                              │
+│  uam task         uam task           (worktree          uam task             │
+│  create           claim <id>          workflow)          release <id>        │
+│  --title "..."                                                               │
+│                   - Assigns to you                      - Marks done         │
+│                   - Announces work                      - Notifies others    │
+│                   - Creates worktree                    - Stores in memory   │
+│                   - Detects overlaps                                         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Essential Commands
+
+```bash
+# Create a new task
+uam task create --title "Fix auth bug" --type bug --priority 0 --labels "security,auth"
+
+# List tasks
+uam task list                              # All open tasks
+uam task list --filter-status in_progress  # In-progress only
+uam task list --filter-priority 0,1        # P0 and P1 only
+uam task ready                             # Ready to work (no blockers)
+uam task blocked                           # Blocked tasks
+
+# Work on a task
+uam task claim <id>                        # Claim and start
+uam task show <id>                         # View details
+uam task update <id> --status in_progress  # Update status
+uam task release <id> --reason "Fixed"     # Complete
+
+# Dependencies (DAG)
+uam task dep --from <child> --to <parent>  # Add dependency
+uam task undep --from <child> --to <parent> # Remove dependency
+
+# Statistics and sync
+uam task stats                             # View statistics
+uam task sync                              # Sync with JSONL (git-tracked)
+uam task compact --days 90                 # Archive old tasks
+```
+
+### Task Hierarchy
+
+```
+Epic (large effort)
+├── Story (user-facing feature)
+│   ├── Task (implementation unit)
+│   └── Task
+└── Story
+    ├── Task
+    ├── Bug (defect fix)
+    └── Chore (maintenance)
+```
+
+Create hierarchies with `--parent`:
+
+```bash
+uam task create --title "Authentication System" --type epic
+uam task create --title "Login Flow" --type story --parent uam-xxxx
+uam task create --title "Implement JWT validation" --type task --parent uam-yyyy
+```
+
+### Integration with Coordination
+
+When you claim a task, the system automatically:
+1. Assigns the task to your agent ID
+2. Announces work to coordination system
+3. Detects overlapping work from other agents
+4. Creates/associates a worktree branch
+5. Returns conflict warnings if detected
+
+```bash
+# Claim with overlap detection
+$ uam task claim uam-a1b2
+✔ Task claimed: uam-a1b2
+  ◐ Refactor authentication module
+  Worktree: feature/task-uam-a1b2
+
+  ⚠️  Overlapping work detected:
+    medium: agent-007 is editing src/auth/jwt.ts - coordinate merge order
+```
+
+### JSONL Git Sync
+
+Tasks are stored in SQLite but can be synced to JSONL for git versioning:
+
+```bash
+# Export current tasks to JSONL
+uam task sync
+
+# File: .uam/tasks/tasks.jsonl
+{"id":"uam-a1b2","title":"Fix auth","type":"bug","status":"open",...}
+{"id":"uam-c3d4","title":"Add feature","type":"feature","status":"done",...}
+```
+
+This allows:
+- Version control of task history
+- Conflict resolution via git
+- Sharing tasks across branches/forks
+- Audit trail of task changes
+
+---
+
+## AGENT COORDINATION SYSTEM
+
+> **For multi-agent environments**: Prevents merge conflicts and optimizes CI/CD.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      AGENT COORDINATION SYSTEM                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                   │
+│  │   Agent A    │    │   Agent B    │    │   Agent C    │                   │
+│  │  (worktree)  │    │  (worktree)  │    │  (worktree)  │                   │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                   │
+│         │                   │                   │                            │
+│         ▼                   ▼                   ▼                            │
+│  ┌─────────────────────────────────────────────────────────────────────┐    │
+│  │                    COORDINATION SERVICE                              │    │
+│  ├─────────────────────────────────────────────────────────────────────┤    │
+│  │  • Agent Registry (who is active)                                    │    │
+│  │  • Work Announcements (who is working where)                         │    │
+│  │  • Overlap Detection (conflict risk assessment)                      │    │
+│  │  • Message Passing (inter-agent communication)                       │    │
+│  │  • Deploy Queue (batched commits/pushes)                             │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Agent Lifecycle
+
+```bash
+# Register at session start
+uam agent register --name "feature-agent" --capabilities "coding,testing" \
+  --worktree "feature/add-auth"
+
+# Send heartbeat (keeps agent active)
+uam agent heartbeat --id <agent-id>
+
+# View active agents
+uam agent status
+
+# Deregister when done
+uam agent deregister --id <agent-id>
+```
+
+### Work Announcements
+
+```bash
+# Announce intent to work (enables overlap detection)
+uam agent announce --id <agent-id> \
+  --resource "src/auth/" \
+  --intent editing \
+  --description "Refactoring JWT handling" \
+  --files "src/auth/jwt.ts,src/auth/validate.ts" \
+  --minutes 30
+
+# Check for overlaps before starting
+uam agent overlaps --resource "src/auth/"
+
+# Mark work complete (notifies others)
+uam agent complete --id <agent-id> --resource "src/auth/"
+```
+
+### Overlap Detection & Conflict Risk
+
+```bash
+$ uam agent overlaps --resource "src/components/Button.tsx"
+
+Overlapping Work Detected:
+┌─────────────────────────────────────────────────────────────────┐
+│ Resource: src/components/Button.tsx                             │
+├──────────────┬────────────┬────────────────────────────────────┤
+│ Agent        │ Risk       │ Suggestion                         │
+├──────────────┼────────────┼────────────────────────────────────┤
+│ agent-ui-001 │ HIGH       │ Coordinate: both editing same file │
+│ agent-test   │ LOW        │ Safe: only reading for tests       │
+└──────────────┴────────────┴────────────────────────────────────┘
+
+Recommendations:
+  1. agent-ui-001 should merge first (started earlier)
+  2. Wait for agent-ui-001 to complete before pushing
+```
+
+### Inter-Agent Messaging
+
+```bash
+# Broadcast to all agents
+uam agent broadcast --id <agent-id> \
+  --channel coordination \
+  --message '{"action":"merge_ready","branch":"feature/auth"}'
+
+# Send direct message
+uam agent send --id <agent-id> \
+  --to <other-agent-id> \
+  --message "Ready for code review"
+
+# Receive messages
+uam agent receive --id <agent-id>
+```
+
+### Deploy Batching
+
+```bash
+# Queue a commit (don't push yet)
+uam deploy queue --agent-id <id> \
+  --action-type commit \
+  --message "feat: add auth" \
+  --files "src/auth.ts,src/auth.test.ts"
+
+# Queue a push
+uam deploy queue --agent-id <id> \
+  --action-type push \
+  --target "feature/auth"
+
+# View queue
+uam deploy status
+
+# Batch and execute (squashes commits, single push)
+uam deploy flush
+
+# Or execute specific batch
+uam deploy batch
+uam deploy execute --batch-id <id>
+```
+
+**Benefits:**
+- Reduces CI/CD runs (batch multiple commits)
+- Squashes related commits for cleaner history
+- Coordinates push order to prevent conflicts
+- Enables atomic multi-file deployments
 
 ---
 
