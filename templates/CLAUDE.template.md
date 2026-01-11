@@ -1,15 +1,34 @@
 <!--
-  CLAUDE.md Universal Template - Optimized v3.0
+  CLAUDE.md Universal Template - v3.1
   
   Single-source-of-truth workflow engine with zero duplication.
   All variables populated by UAM generator from project analysis.
   
-  Template Variables: {{PROJECT_NAME}}, {{PROJECT_PATH}}, {{DEFAULT_BRANCH}},
-  {{MEMORY_DB_PATH}}, {{MEMORY_QUERY_CMD}}, {{MEMORY_STORE_CMD}}, {{MEMORY_START_CMD}},
-  {{LONG_TERM_BACKEND}}, {{LONG_TERM_ENDPOINT}}, {{LONG_TERM_COLLECTION}}, {{SHORT_TERM_LIMIT}},
-  {{WORKTREE_CREATE_CMD}}, {{WORKTREE_PR_CMD}}, {{WORKTREE_CLEANUP_CMD}}, {{WORKTREE_DIR}},
-  {{BRANCH_PREFIX}}, {{SKILLS_PATH}}, {{DROIDS_PATH}}, {{COMMANDS_PATH}}, {{DOCS_PATH}},
-  {{SCREENSHOTS_PATH}}, {{TEST_COMMAND}}, {{STRUCTURE_DATE}}
+  Core Variables:
+    {{PROJECT_NAME}}, {{PROJECT_PATH}}, {{DEFAULT_BRANCH}}, {{STRUCTURE_DATE}}
+  
+  Memory System:
+    {{MEMORY_DB_PATH}}, {{MEMORY_QUERY_CMD}}, {{MEMORY_STORE_CMD}}, {{MEMORY_START_CMD}},
+    {{MEMORY_STATUS_CMD}}, {{MEMORY_STOP_CMD}}, {{LONG_TERM_BACKEND}}, {{LONG_TERM_ENDPOINT}},
+    {{LONG_TERM_COLLECTION}}, {{SHORT_TERM_LIMIT}}
+  
+  Worktree:
+    {{WORKTREE_CREATE_CMD}}, {{WORKTREE_PR_CMD}}, {{WORKTREE_CLEANUP_CMD}},
+    {{WORKTREE_DIR}}, {{BRANCH_PREFIX}}
+  
+  Paths:
+    {{SKILLS_PATH}}, {{DROIDS_PATH}}, {{COMMANDS_PATH}}, {{DOCS_PATH}}, {{SCREENSHOTS_PATH}}
+  
+  Commands:
+    {{TEST_COMMAND}}, {{BUILD_COMMAND}}, {{LINT_COMMAND}}
+  
+  Conditional Sections (auto-populated from analysis):
+    REPOSITORY_STRUCTURE, ARCHITECTURE_OVERVIEW, DATABASE_ARCHITECTURE,
+    CORE_COMPONENTS, CLUSTER_CONTEXTS, PROJECT_URLS, KEY_WORKFLOWS,
+    ESSENTIAL_COMMANDS, INFRA_WORKFLOW, HEALTH_CHECKS, ROLLBACK_PROCEDURES,
+    INCIDENT_RESPONSE, TROUBLESHOOTING, KEY_CONFIG_FILES, DISCOVERED_SKILLS,
+    LANGUAGE_DROIDS, PREPOPULATED_KNOWLEDGE, FILE_TYPE_ROUTING, SKILL_TRIGGERS,
+    RECENT_ACTIVITY, LEARNED_LESSONS, KNOWN_GOTCHAS, HOT_SPOTS
 -->
 
 <coding_guidelines>
@@ -163,6 +182,43 @@ Skill(skill: "senior-frontend")         # React/TS work
 Task(subagent_type: "code-quality-guardian", prompt: "Review...")
 Task(subagent_type: "security-auditor", prompt: "Audit...")
 ```
+
+### Skill vs Droid: When to Use Which
+| Use a **Skill** when | Use a **Droid** when |
+|---------------------|---------------------|
+| Inline guidance needed | Autonomous agent work needed |
+| Human follows instructions | Agent executes independently |
+| Interactive decision-making | Batch processing of tasks |
+| Design/review work | Code generation/refactoring |
+| Expands into current context | Runs in parallel as subagent |
+
+---
+
+## TASK ROUTING
+
+### By Request Type
+| Keywords | Task Type | Workflow | Droids |
+|----------|-----------|----------|--------|
+| "fix", "bug", "error", "broken" | Bug | Reproduce → Test → Fix | `code-quality-guardian` |
+| "add", "implement", "build", "feature" | Feature | Design → Implement → Test | Language specialist |
+| "slow", "optimize", "performance" | Performance | Profile → Identify → Optimize | `performance-optimizer` |
+| "security", "vulnerability", "audit" | Security | Scan → Assess → Remediate | `security-auditor` |
+| "test", "coverage", "spec" | Testing | Write → Run → Report | `code-quality-guardian` |
+| "docs", "README", "document" | Docs | Check → Update → Verify | `documentation-expert` |
+| "refactor", "clean up" | Refactoring | Scope → Test → Refactor | `code-quality-guardian` |
+
+### By File Type
+| Extension | Language | Droid |
+|-----------|----------|-------|
+{{#if FILE_TYPE_ROUTING}}
+{{{FILE_TYPE_ROUTING}}}
+{{else}}
+| `.ts`, `.tsx`, `.js`, `.jsx` | TypeScript/JavaScript | `typescript-node-expert` |
+| `.py` | Python | Language specialist |
+| `.go` | Go | Language specialist |
+| `.rs` | Rust | Language specialist |
+| `.cpp`, `.h`, `.hpp` | C++ | Language specialist |
+{{/if}}
 
 ---
 
@@ -353,6 +409,24 @@ After EVERY browser action:
 ## Infrastructure Workflow
 
 {{{INFRA_WORKFLOW}}}
+{{/if}}
+
+{{#if HEALTH_CHECKS}}
+## Health Checks
+
+{{{HEALTH_CHECKS}}}
+{{/if}}
+
+{{#if ROLLBACK_PROCEDURES}}
+## Emergency Rollback
+
+{{{ROLLBACK_PROCEDURES}}}
+{{/if}}
+
+{{#if INCIDENT_RESPONSE}}
+## Incident Response
+
+{{{INCIDENT_RESPONSE}}}
 {{/if}}
 
 {{#if TROUBLESHOOTING}}
