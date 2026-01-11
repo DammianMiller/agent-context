@@ -1,7 +1,7 @@
 <!--
-  CLAUDE.md Universal Template - v3.1
+  CLAUDE.md Universal Template - v4.0
   
-  Single-source-of-truth workflow engine with zero duplication.
+  Complete autonomous agent operating system with zero duplication.
   All variables populated by UAM generator from project analysis.
   
   Core Variables:
@@ -27,8 +27,9 @@
     CORE_COMPONENTS, CLUSTER_CONTEXTS, PROJECT_URLS, KEY_WORKFLOWS,
     ESSENTIAL_COMMANDS, INFRA_WORKFLOW, HEALTH_CHECKS, ROLLBACK_PROCEDURES,
     INCIDENT_RESPONSE, TROUBLESHOOTING, KEY_CONFIG_FILES, DISCOVERED_SKILLS,
-    LANGUAGE_DROIDS, PREPOPULATED_KNOWLEDGE, FILE_TYPE_ROUTING, SKILL_TRIGGERS,
-    RECENT_ACTIVITY, LEARNED_LESSONS, KNOWN_GOTCHAS, HOT_SPOTS
+    LANGUAGE_DROIDS, FILE_TYPE_ROUTING, SKILL_TRIGGERS, SKILL_MAPPINGS,
+    RECENT_ACTIVITY, LEARNED_LESSONS, KNOWN_GOTCHAS, HOT_SPOTS, AUTH_FLOW,
+    MCP_PLUGINS, PATH_MIGRATIONS
 -->
 
 <coding_guidelines>
@@ -36,6 +37,10 @@
 # {{PROJECT_NAME}} - Autonomous Agent Guide
 
 You are an autonomous AI agent. Follow the WORKFLOW ENGINE below for EVERY action. No exceptions.
+
+{{#if ISSUE_TRACKER}}
+**Note**: {{{ISSUE_TRACKER}}}
+{{/if}}
 
 ---
 
@@ -50,10 +55,10 @@ You are an autonomous AI agent. Follow the WORKFLOW ENGINE below for EVERY actio
 │  └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘   │
 │       │              │              │              │              │         │
 │       ▼              ▼              ▼              ▼              ▼         │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
 │  │ CHECK TASKS  │ CREATE/CLAIM │ MEMORY+SKILL │ WORKTREE+DO │ VERIFY   │   │
 │  │ READ MEMORY  │ TASK         │ CHECK        │ TEST+PR     │ RELEASE  │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
 │  GATES: Each phase MUST complete before advancing. No skipping.             │
 │                                                                              │
@@ -132,6 +137,54 @@ uam task release <id> --reason "Completed: summary"
 
 ---
 
+## AUTOMATIC TRIGGERS
+
+| Pattern Detected | Immediate Action |
+|-----------------|------------------|
+| Work request (fix/add/change/create/build) | `uam task create --title "..." --type task` |
+| Bug report or error | `uam task create --title "..." --type bug --priority 1` |
+| Feature request | `uam task create --title "..." --type feature` |
+| Code file editing | Check skills → Create worktree → Edit |
+| Review/check request | Query memory first |
+{{#if SKILL_TRIGGERS}}
+{{{SKILL_TRIGGERS}}}
+{{/if}}
+
+---
+
+## TASK ROUTING
+
+### By Request Type
+| Keywords | Task Type | Workflow | Droids |
+|----------|-----------|----------|--------|
+| "fix", "bug", "error", "broken" | Bug | Reproduce → Test → Fix | `code-quality-guardian` |
+| "add", "implement", "build", "feature" | Feature | Design → Implement → Test | Language specialist |
+| "slow", "optimize", "performance" | Performance | Profile → Identify → Optimize | `performance-optimizer` |
+| "security", "vulnerability", "audit" | Security | Scan → Assess → Remediate | `security-auditor` |
+| "test", "coverage", "spec" | Testing | Write → Run → Report | `code-quality-guardian` |
+| "docs", "README", "document" | Docs | Check → Update → Verify | `documentation-expert` |
+| "refactor", "clean up" | Refactoring | Scope → Test → Refactor | `code-quality-guardian` |
+{{#if HAS_INFRA}}
+| "terraform", "infra", "k8s", "cluster" | Infrastructure | Plan → Apply → Verify → Document | Direct handling |
+{{/if}}
+
+### By File Type
+| Extension | Language | Droid |
+|-----------|----------|-------|
+{{#if FILE_TYPE_ROUTING}}
+{{{FILE_TYPE_ROUTING}}}
+{{else}}
+| `.ts`, `.tsx`, `.js`, `.jsx` | TypeScript/JavaScript | `typescript-node-expert` |
+| `.py` | Python | Language specialist |
+| `.go` | Go | Language specialist |
+| `.rs` | Rust | Language specialist |
+| `.cpp`, `.h`, `.hpp` | C++ | Language specialist |
+| `.tf` | Terraform | Direct handling |
+| `.yaml`, `.yml` | Kubernetes/Config | Direct handling |
+{{/if}}
+
+---
+
 ## QUICK REFERENCE
 
 ### Task Commands
@@ -194,100 +247,26 @@ Task(subagent_type: "security-auditor", prompt: "Audit...")
 
 ---
 
-## TASK ROUTING
-
-### By Request Type
-| Keywords | Task Type | Workflow | Droids |
-|----------|-----------|----------|--------|
-| "fix", "bug", "error", "broken" | Bug | Reproduce → Test → Fix | `code-quality-guardian` |
-| "add", "implement", "build", "feature" | Feature | Design → Implement → Test | Language specialist |
-| "slow", "optimize", "performance" | Performance | Profile → Identify → Optimize | `performance-optimizer` |
-| "security", "vulnerability", "audit" | Security | Scan → Assess → Remediate | `security-auditor` |
-| "test", "coverage", "spec" | Testing | Write → Run → Report | `code-quality-guardian` |
-| "docs", "README", "document" | Docs | Check → Update → Verify | `documentation-expert` |
-| "refactor", "clean up" | Refactoring | Scope → Test → Refactor | `code-quality-guardian` |
-
-### By File Type
-| Extension | Language | Droid |
-|-----------|----------|-------|
-{{#if FILE_TYPE_ROUTING}}
-{{{FILE_TYPE_ROUTING}}}
-{{else}}
-| `.ts`, `.tsx`, `.js`, `.jsx` | TypeScript/JavaScript | `typescript-node-expert` |
-| `.py` | Python | Language specialist |
-| `.go` | Go | Language specialist |
-| `.rs` | Rust | Language specialist |
-| `.cpp`, `.h`, `.hpp` | C++ | Language specialist |
-{{/if}}
-
----
-
-## AUTOMATIC TRIGGERS
-
-| Pattern Detected | Immediate Action |
-|-----------------|------------------|
-| Work request (fix/add/change/create/build) | `uam task create --title "..." --type task` |
-| Bug report or error | `uam task create --title "..." --type bug --priority 1` |
-| Feature request | `uam task create --title "..." --type feature` |
-| Code file editing | Check skills → Create worktree → Edit |
-| Review/check request | Query memory first |
-{{#if SKILL_TRIGGERS}}
-{{{SKILL_TRIGGERS}}}
-{{/if}}
-
----
-
-## RECOVERY PROCEDURES
-
-### Forgot to create task?
-```bash
-# Create task now, link existing work
-uam task create --title "Retroactive: what you did" --type task
-uam task update <id> --status in_progress
-# Continue with workflow, release when done
-```
-
-### Forgot worktree? Edited main repo directly?
-```bash
-# If not committed yet: stash and move to worktree
-git stash
-{{WORKTREE_CREATE_CMD}} <slug>
-cd {{WORKTREE_DIR}}/NNN-<slug>/
-git stash pop
-
-# If already committed: cherry-pick to worktree, reset main
-git log -1 --format="%H"  # Note commit hash
-git reset --hard HEAD~1   # Remove from main
-{{WORKTREE_CREATE_CMD}} <slug>
-cd {{WORKTREE_DIR}}/NNN-<slug>/
-git cherry-pick <hash>
-```
-
-### Command failed?
-```bash
-# Check service status
-{{MEMORY_START_CMD}}
-uam coord status
-
-# Verify database exists
-ls -la {{MEMORY_DB_PATH}}
-```
-
----
-
 ## RULES (Zero Tolerance)
 
-### 1. Tasks
+### 1. Worktrees
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    WORKTREE ENFORCEMENT - ABSOLUTE RULE                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ❌ FORBIDDEN: Direct commits to {{DEFAULT_BRANCH}}, editing main repo      │
+│  ✅ REQUIRED: Create worktree → cd into it → make changes → PR              │
+│  🔴 SELF-CHECK: pwd | grep -q "{{WORKTREE_DIR}}" || echo "STOP!"            │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Applies to:** {{WORKTREE_APPLIES_TO}}
+
+### 2. Tasks
 - **ALWAYS** create task before work
 - **ALWAYS** claim before starting
 - **ALWAYS** release when complete
 - **NEVER** work without task tracking
-
-### 2. Worktrees
-- **ALWAYS** create worktree for code changes
-- **ALWAYS** verify `pwd` contains `{{WORKTREE_DIR}}`
-- **ALWAYS** use PR, never direct push
-- **NEVER** commit directly to {{DEFAULT_BRANCH}}
 
 ### 3. Memory
 - **ALWAYS** query memory at task start
@@ -297,12 +276,72 @@ ls -la {{MEMORY_DB_PATH}}
 
 ### 4. Skills
 - **ALWAYS** check for applicable skills before implementing
-- **ALWAYS** invoke proactively for: TypeScript, CLI, Frontend, Security, Performance
+- **ALWAYS** invoke proactively for specialized work
 - **NEVER** implement without consulting relevant skill/droid
+
+{{#if SKILL_MAPPINGS}}
+| Task Type | Required Skill/Droid |
+|-----------|---------------------|
+{{{SKILL_MAPPINGS}}}
+{{/if}}
+
+---
+
+## RECOVERY PROCEDURES
+
+### Forgot to create task?
+```bash
+uam task create --title "Retroactive: what you did" --type task
+uam task update <id> --status in_progress
+```
+
+### Forgot worktree? Edited main repo directly?
+```bash
+# If not committed: stash and move
+git stash
+{{WORKTREE_CREATE_CMD}} <slug>
+cd {{WORKTREE_DIR}}/NNN-<slug>/
+git stash pop
+
+# If committed: cherry-pick to worktree, reset main
+git log -1 --format="%H"
+git reset --hard HEAD~1
+{{WORKTREE_CREATE_CMD}} <slug>
+cd {{WORKTREE_DIR}}/NNN-<slug>/
+git cherry-pick <hash>
+```
+
+### Command failed?
+```bash
+{{MEMORY_START_CMD}}
+uam coord status
+ls -la {{MEMORY_DB_PATH}}
+```
 
 ---
 
 ## MEMORY SYSTEM
+
+### 4-Layer Architecture
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  LAYER 1: WORKING MEMORY (SQLite)           ~0.15ms access          │
+│  ├─ {{SHORT_TERM_LIMIT}} entries max, FIFO eviction                 │
+│  └─ Path: {{MEMORY_DB_PATH}}                                        │
+│                                                                     │
+│  LAYER 2: SESSION MEMORY (SQLite)           ~0.2ms access           │
+│  ├─ Session-scoped summaries and decisions                          │
+│  └─ Cleaned on session end                                          │
+│                                                                     │
+│  LAYER 3: SEMANTIC MEMORY ({{LONG_TERM_BACKEND}})  ~1-2ms search    │
+│  ├─ Vector embeddings for semantic search                           │
+│  └─ Endpoint: {{LONG_TERM_ENDPOINT}}                                │
+│                                                                     │
+│  LAYER 4: KNOWLEDGE GRAPH (SQLite)          ~0.17ms query           │
+│  ├─ Entities: files, functions, concepts, errors                    │
+│  └─ Relationships: depends_on, fixes, causes, related_to            │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ### Layer Selection
 | Question | If YES → Layer |
@@ -319,9 +358,9 @@ ls -la {{MEMORY_DB_PATH}}
 - Gotchas and workarounds
 - API behaviors that aren't obvious
 
-### Services
+### Memory Services
 ```bash
-{{MEMORY_START_CMD}}              # Start Qdrant
+{{MEMORY_START_CMD}}              # Start services
 {{MEMORY_STATUS_CMD}}             # Check status
 {{MEMORY_STOP_CMD}}               # Stop services
 uam memory migrate                # Upgrade schema
@@ -337,6 +376,13 @@ uam memory migrate                # Upgrade schema
 | `security-auditor` | All code changes | OWASP, secrets, injection |
 | `performance-optimizer` | Performance-critical | Algorithms, memory, caching |
 | `documentation-expert` | New features/APIs | JSDoc, README, accuracy |
+
+{{#if LANGUAGE_DROIDS}}
+### Language Specialists
+| Droid | Expertise |
+|-------|-----------|
+{{{LANGUAGE_DROIDS}}}
+{{/if}}
 
 ---
 
@@ -357,22 +403,10 @@ After EVERY browser action:
 ```
 {{/if}}
 
-{{#if ARCHITECTURE_OVERVIEW}}
-## Architecture
+{{#if PATH_MIGRATIONS}}
+### Path Migration Reference
 
-{{{ARCHITECTURE_OVERVIEW}}}
-{{/if}}
-
-{{#if DATABASE_ARCHITECTURE}}
-### Database
-
-{{{DATABASE_ARCHITECTURE}}}
-{{/if}}
-
-{{#if CORE_COMPONENTS}}
-## Core Components
-
-{{{CORE_COMPONENTS}}}
+{{{PATH_MIGRATIONS}}}
 {{/if}}
 
 {{#if CLUSTER_CONTEXTS}}
@@ -403,6 +437,30 @@ After EVERY browser action:
 ```bash
 {{{ESSENTIAL_COMMANDS}}}
 ```
+{{/if}}
+
+{{#if ARCHITECTURE_OVERVIEW}}
+## Architecture
+
+{{{ARCHITECTURE_OVERVIEW}}}
+{{/if}}
+
+{{#if DATABASE_ARCHITECTURE}}
+### Database
+
+{{{DATABASE_ARCHITECTURE}}}
+{{/if}}
+
+{{#if CORE_COMPONENTS}}
+## Core Components
+
+{{{CORE_COMPONENTS}}}
+{{/if}}
+
+{{#if AUTH_FLOW}}
+## Authentication Flow
+
+{{{AUTH_FLOW}}}
 {{/if}}
 
 {{#if INFRA_WORKFLOW}}
@@ -446,29 +504,39 @@ After EVERY browser action:
 {{#if DISCOVERED_SKILLS}}
 ## Project Skills
 
+| Skill | Purpose | Use When |
+|-------|---------|----------|
 {{{DISCOVERED_SKILLS}}}
 {{/if}}
 
-{{#if LANGUAGE_DROIDS}}
-## Language Specialists
+{{#if MCP_PLUGINS}}
+## MCP Plugins
 
-{{{LANGUAGE_DROIDS}}}
+| Plugin | Purpose |
+|--------|---------|
+{{{MCP_PLUGINS}}}
 {{/if}}
 
-{{#if PREPOPULATED_KNOWLEDGE}}
+{{#if RECENT_ACTIVITY}}
 ## Project Knowledge
 
 ### Recent Activity
 {{{RECENT_ACTIVITY}}}
 
+{{#if LEARNED_LESSONS}}
 ### Learned Lessons
 {{{LEARNED_LESSONS}}}
+{{/if}}
 
+{{#if KNOWN_GOTCHAS}}
 ### Known Gotchas
 {{{KNOWN_GOTCHAS}}}
+{{/if}}
 
+{{#if HOT_SPOTS}}
 ### Hot Spots
 {{{HOT_SPOTS}}}
+{{/if}}
 {{/if}}
 
 ---
@@ -483,6 +551,9 @@ After EVERY browser action:
 [ ] Memory updated (short + long term)
 [ ] Skills consulted
 [ ] No secrets in code
+{{#if HAS_INFRA}}
+[ ] Infrastructure changes documented
+{{/if}}
 ```
 
 </coding_guidelines>

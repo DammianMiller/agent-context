@@ -74,6 +74,9 @@ async function buildContext(
   // Build language droids table
   const languageDroids = buildLanguageDroidsTable(droids, analysis.languages);
   
+  // Build file type routing
+  const fileTypeRouting = buildFileTypeRouting(analysis.languages);
+  
   // Build discovered skills table
   const discoveredSkillsTable = buildDiscoveredSkillsTable(skills);
 
@@ -172,6 +175,7 @@ async function buildContext(
     DISCOVERED_SKILLS: discoveredSkillsTable,
     LANGUAGE_DROIDS: languageDroids,
     LANGUAGE_EXAMPLES: languageExamples,
+    FILE_TYPE_ROUTING: fileTypeRouting,
 
     // Repository structure (support both old @REPOSITORY_STRUCTURE and new REPOSITORY_STRUCTURE)
     '@REPOSITORY_STRUCTURE': repoStructure,
@@ -639,6 +643,50 @@ function buildLanguageExamples(languages: string[]): string | null {
   }
 
   return examples.length > 0 ? examples.join('\n\n') : null;
+}
+
+function buildFileTypeRouting(languages: string[]): string | null {
+  const routing: string[] = [];
+  const added = new Set<string>();
+
+  for (const lang of languages) {
+    const langLower = lang.toLowerCase();
+    
+    if ((langLower.includes('typescript') || langLower.includes('javascript')) && !added.has('ts')) {
+      routing.push('| `.ts`, `.tsx`, `.js`, `.jsx` | TypeScript/JavaScript | `typescript-node-expert` |');
+      added.add('ts');
+    }
+    if (langLower.includes('python') && !added.has('py')) {
+      routing.push('| `.py` | Python | `python-pro` |');
+      added.add('py');
+    }
+    if ((langLower.includes('c++') || langLower.includes('cpp')) && !added.has('cpp')) {
+      routing.push('| `.cpp`, `.h`, `.hpp` | C++ | `cpp-pro` |');
+      added.add('cpp');
+    }
+    if (langLower.includes('rust') && !added.has('rs')) {
+      routing.push('| `.rs` | Rust | `rust-pro` |');
+      added.add('rs');
+    }
+    if (langLower.includes('go') && !added.has('go')) {
+      routing.push('| `.go` | Go | `go-pro` |');
+      added.add('go');
+    }
+    if (langLower.includes('java') && !added.has('java')) {
+      routing.push('| `.java` | Java | `java-pro` |');
+      added.add('java');
+    }
+  }
+
+  // Always add Terraform and YAML for infrastructure projects
+  if (!added.has('tf')) {
+    routing.push('| `.tf` | Terraform | Direct handling |');
+  }
+  if (!added.has('yaml')) {
+    routing.push('| `.yaml`, `.yml` | Kubernetes/Config | Direct handling |');
+  }
+
+  return routing.length > 0 ? routing.join('\n') : null;
 }
 
 function buildPrepopulatedKnowledge(

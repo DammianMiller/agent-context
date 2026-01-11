@@ -70,6 +70,18 @@ export async function analyzeProject(cwd: string): Promise<ProjectAnalysis> {
   // Detect key configuration files
   detectKeyConfigFiles(cwd, analysis);
 
+  // Detect authentication
+  detectAuthentication(cwd, analysis);
+
+  // Detect clusters (Kubernetes)
+  detectClusters(cwd, analysis);
+
+  // Detect components from apps/services directories
+  detectComponents(cwd, analysis);
+
+  // Detect file type routing from languages
+  detectFileTypeRouting(analysis);
+
   return analysis;
 }
 
@@ -472,4 +484,209 @@ function detectKeyConfigFiles(cwd: string, analysis: ProjectAnalysis): void {
       }
     }
   }
+}
+
+function detectAuthentication(cwd: string, analysis: ProjectAnalysis): void {
+  // Check for common auth providers
+  const authPatterns: Array<{ pattern: string; provider: string; description: string }> = [
+    { pattern: 'zitadel', provider: 'Zitadel', description: 'OIDC/OAuth2 authentication' },
+    { pattern: 'keycloak', provider: 'Keycloak', description: 'Identity and access management' },
+    { pattern: 'auth0', provider: 'Auth0', description: 'Authentication platform' },
+    { pattern: 'oauth2-proxy', provider: 'OAuth2 Proxy', description: 'OAuth2 authentication proxy' },
+    { pattern: 'firebase-auth', provider: 'Firebase Auth', description: 'Firebase authentication' },
+    { pattern: 'supabase', provider: 'Supabase', description: 'Supabase authentication' },
+    { pattern: 'clerk', provider: 'Clerk', description: 'Clerk authentication' },
+    { pattern: 'passport', provider: 'Passport.js', description: 'Node.js authentication middleware' },
+  ];
+
+  // Check in various config files
+  const filesToCheck = [
+    'docker-compose.yml',
+    'package.json',
+    'requirements.txt',
+    '.env.example',
+  ];
+
+  for (const file of filesToCheck) {
+    const filePath = join(cwd, file);
+    if (existsSync(filePath)) {
+      try {
+        const content = readFileSync(filePath, 'utf-8').toLowerCase();
+        for (const auth of authPatterns) {
+          if (content.includes(auth.pattern)) {
+            analysis.authentication = {
+              provider: auth.provider,
+              description: auth.description,
+            };
+            return;
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  // Check for Istio with OAuth2
+  const k8sPath = join(cwd, 'infra/k8s');
+  if (existsSync(k8sPath)) {
+    try {
+      const files = readdirSync(k8sPath, { recursive: true }) as string[];
+      for (const file of files) {
+        if (typeof file === 'string' && (file.includes('oauth') || file.includes('auth'))) {
+          analysis.authentication = {
+            provider: 'OAuth2',
+            description: 'OAuth2 authentication via Kubernetes/Istio',
+          };
+          return;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+function detectClusters(cwd: string, analysis: ProjectAnalysis): void {
+  // Check for kubeconfig references or cluster configs
+  const k8sPath = join(cwd, 'infra/k8s');
+  const terraformPath = join(cwd, 'infra/terraform');
+  
+  if (!existsSync(k8sPath) && !existsSync(terraformPath)) {
+    return;
+  }
+
+  // Look for cluster context patterns in terraform files
+  if (existsSync(terraformPath)) {
+    try {
+      const files = readdirSync(terraformPath).filter(f => f.endsWith('.tf'));
+      const contexts: Array<{ name: string; context: string; purpose: string }> = [];
+      
+      for (const file of files) {
+        const content = readFileSync(join(terraformPath, file), 'utf-8');
+        
+        // Look for digitalocean_kubernetes_cluster or similar
+        const doClusterMatch = content.match(/do-[\w-]+/g);
+        if (doClusterMatch) {
+          for (const match of [...new Set(doClusterMatch)]) {
+            if (!contexts.find(c => c.context === match)) {
+              const purpose = match.includes('openobserve') ? 'Observability' :
+                             match.includes('zitadel') ? 'Authentication' :
+                             'Applications';
+              contexts.push({
+                name: match.replace(/^do-\w+-/, '').replace(/-/g, ' '),
+                context: match,
+                purpose,
+              });
+            }
+          }
+        }
+      }
+
+      if (contexts.length > 0) {
+        analysis.clusters = {
+          enabled: true,
+          contexts,
+        };
+      }
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+function detectComponents(cwd: string, analysis: ProjectAnalysis): void {
+  // Scan apps/ and services/ directories for components
+  const componentDirs = ['apps', 'services', 'packages', 'libs'];
+  
+  for (const dir of componentDirs) {
+    const dirPath = join(cwd, dir);
+    if (!existsSync(dirPath)) continue;
+
+    try {
+      const subdirs = readdirSync(dirPath, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('.'));
+      
+      for (const subdir of subdirs) {
+        const compPath = join(dirPath, subdir.name);
+        
+        // Detect language and framework
+        let language = 'Unknown';
+        let framework = '';
+        let description = '';
+
+        // Check for package.json
+        const pkgPath = join(compPath, 'package.json');
+        if (existsSync(pkgPath)) {
+          try {
+            const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+            description = pkg.description || '';
+            language = 'TypeScript';
+            
+            const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+            if (deps.react) framework = 'React';
+            else if (deps.vue) framework = 'Vue';
+            else if (deps.express) framework = 'Express';
+            else if (deps.fastify) framework = 'Fastify';
+            else if (deps.next) framework = 'Next.js';
+          } catch {
+            // Ignore
+          }
+        }
+
+        // Check for pyproject.toml or requirements.txt
+        if (existsSync(join(compPath, 'pyproject.toml')) || existsSync(join(compPath, 'requirements.txt'))) {
+          language = 'Python';
+          if (existsSync(join(compPath, 'pyproject.toml'))) {
+            const content = readFileSync(join(compPath, 'pyproject.toml'), 'utf-8');
+            if (content.includes('fastapi')) framework = 'FastAPI';
+            else if (content.includes('flask')) framework = 'Flask';
+            else if (content.includes('django')) framework = 'Django';
+          }
+        }
+
+        // Check for CMakeLists.txt (C++)
+        if (existsSync(join(compPath, 'CMakeLists.txt'))) {
+          language = 'C++';
+          const content = readFileSync(join(compPath, 'CMakeLists.txt'), 'utf-8');
+          if (content.includes('crow') || content.includes('Crow')) framework = 'Crow';
+        }
+
+        // Check for Cargo.toml (Rust)
+        if (existsSync(join(compPath, 'Cargo.toml'))) {
+          language = 'Rust';
+        }
+
+        // Check for go.mod (Go)
+        if (existsSync(join(compPath, 'go.mod'))) {
+          language = 'Go';
+        }
+
+        // Only add if not already present
+        const compFullPath = `${dir}/${subdir.name}`;
+        if (!analysis.components.find(c => c.path === compFullPath)) {
+          analysis.components.push({
+            name: subdir.name,
+            path: compFullPath,
+            language,
+            framework: framework || undefined,
+            description: description || `${language}${framework ? ` ${framework}` : ''} component`,
+          });
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }
+}
+
+function detectFileTypeRouting(analysis: ProjectAnalysis): void {
+  // This function doesn't modify analysis directly but ensures languages are properly detected
+  // The FILE_TYPE_ROUTING template variable is built by the generator based on detected languages
+  
+  // Ensure unique languages
+  analysis.languages = [...new Set(analysis.languages)];
+  
+  // Ensure frameworks are unique
+  analysis.frameworks = [...new Set(analysis.frameworks)];
 }
