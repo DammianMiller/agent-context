@@ -447,6 +447,70 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 
 ---
 
+## 🔄 COMPLETION PROTOCOL - MANDATORY
+
+**WORK IS NOT DONE UNTIL 100% COMPLETE. ALWAYS FOLLOW THIS SEQUENCE:**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MERGE → DEPLOY → MONITOR → FIX               │
+│                     (Iterate until 100% complete)               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. MERGE                                                        │
+│     ├─ Get PR approved (or self-approve if authorized)          │
+│     ├─ Merge to {{DEFAULT_BRANCH}}                              │
+│     └─ Delete feature branch                                    │
+│                                                                  │
+│  2. DEPLOY                                                       │
+│     ├─ Verify CI/CD pipeline runs                               │
+│     ├─ Check deployment status                                  │
+│     └─ Confirm changes are live                                 │
+│                                                                  │
+│  3. MONITOR                                                      │
+│     ├─ Check logs for errors                                    │
+│     ├─ Verify functionality works as expected                   │
+│     ├─ Run smoke tests if available                             │
+│     └─ Check metrics/dashboards                                 │
+│                                                                  │
+│  4. FIX (if issues found)                                        │
+│     ├─ Create new worktree for fix                              │
+│     ├─ Fix the issue                                            │
+│     ├─ GOTO step 1 (Merge)                                      │
+│     └─ Repeat until 100% working                                │
+│                                                                  │
+│  5. COMPLETE                                                     │
+│     ├─ Update memory with learnings                             │
+│     ├─ Close related tasks/issues                               │
+│     └─ Announce completion                                      │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**⚠️ NEVER say "done" or "complete" until:**
+- PR is merged (not just created)
+- Deployment succeeded (not just triggered)
+- Functionality verified working (not just "should work")
+- All errors/issues fixed (iterate as needed)
+
+**Commands for completion:**
+```bash
+# After PR merged, verify deployment
+git checkout {{DEFAULT_BRANCH}} && git pull
+{{BUILD_COMMAND}}
+{{TEST_COMMAND}}
+
+# Check CI/CD status
+gh run list --limit 5
+gh run view <run-id>
+
+# If issues found, fix immediately
+{{WORKTREE_CREATE_CMD}} hotfix-<issue>
+# ... fix, test, PR, merge, repeat
+```
+
+---
+
 {{#if RECENT_ACTIVITY}}
 ## 📊 Project Knowledge
 
