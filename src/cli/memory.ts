@@ -1,12 +1,17 @@
 import chalk from 'chalk';
 import ora from 'ora';
+import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
+import { QdrantClient } from '@qdrant/js-client-rest';
 import { prepopulateMemory } from '../memory/prepopulate.js';
 import { SQLiteShortTermMemory } from '../memory/short-term/sqlite.js';
 import { AgentContextConfigSchema } from '../types/index.js';
 import type { AgentContextConfig } from '../types/index.js';
+import type { MemoryEntry } from '../memory/backends/base.js';
+import type { DiscoveredSkill } from '../memory/prepopulate.js';
 
 // CRITICAL: Memory databases are NEVER deleted or overwritten.
 // They persist with the project for its entire lifecycle.
@@ -392,10 +397,43 @@ async function prepopulateFromSources(cwd: string, options: MemoryOptions): Prom
       }
     }
 
-    // Store long-term memories (summary for now)
+    let sessionInserted = 0;
+    let graphStats: { entities: number; relationships: number } = { entities: 0, relationships: 0 };
+
+    if (shortTerm.length > 0 || longTerm.length > 0) {
+      const sessionSpinner = ora('Storing session memories...').start();
+      try {
+        const dbPath = config.memory?.shortTerm?.path || join(cwd, 'agents/data/memory/short_term.db');
+        sessionInserted = storeSessionMemories(dbPath, config.project.name, shortTerm, longTerm);
+        sessionSpinner.succeed(`Stored ${sessionInserted} session memories`);
+      } catch (error) {
+        sessionSpinner.fail('Failed to store session memories');
+        console.error(chalk.red(error));
+      }
+    }
+
+    if (longTerm.length > 0 || skills.length > 0) {
+      const graphSpinner = ora('Building knowledge graph...').start();
+      try {
+        const dbPath = config.memory?.shortTerm?.path || join(cwd, 'agents/data/memory/short_term.db');
+        graphStats = storeKnowledgeGraph(dbPath, config.project.name, longTerm, skills);
+        graphSpinner.succeed(`Stored ${graphStats.entities} entities, ${graphStats.relationships} relationships`);
+      } catch (error) {
+        graphSpinner.fail('Failed to build knowledge graph');
+        console.error(chalk.red(error));
+      }
+    }
+
+    // Store long-term memories (Qdrant + export)
     if (longTerm.length > 0) {
       console.log(chalk.dim(`\n  Long-term memories ready: ${longTerm.length} entries`));
-      console.log(chalk.dim('  To store in Qdrant, run: uam memory start'));
+      const ltSpinner = ora('Storing long-term memories to Qdrant...').start();
+      const ltResult = await storeLongTermToQdrant(longTerm, config);
+      if (ltResult.stored > 0) {
+        ltSpinner.succeed(`Stored ${ltResult.stored} long-term memories to ${ltResult.backend}`);
+      } else {
+        ltSpinner.warn(`Skipped long-term store: ${ltResult.reason || 'Qdrant not available'}`);
+      }
       
       // Save long-term memories as JSON for manual import or Qdrant storage
       const ltPath = join(cwd, 'agents/data/memory/long_term_prepopulated.json');
@@ -419,6 +457,9 @@ async function prepopulateFromSources(cwd: string, options: MemoryOptions): Prom
     console.log(chalk.dim(`  Thoughts: ${byType.thoughts}`));
     console.log(chalk.dim(`  Actions: ${byType.actions}`));
     console.log(chalk.dim(`  Goals: ${byType.goals}`));
+    console.log(chalk.dim(`  Session memories: ${sessionInserted}`));
+    console.log(chalk.dim(`  Graph entities: ${graphStats.entities}`));
+    console.log(chalk.dim(`  Graph relationships: ${graphStats.relationships}`));
 
     // Show sample memories
     if (options.verbose && shortTerm.length > 0) {
@@ -433,5 +474,237 @@ async function prepopulateFromSources(cwd: string, options: MemoryOptions): Prom
   } catch (error) {
     spinner.fail('Failed to prepopulate memory');
     console.error(chalk.red(error));
+  }
+}
+
+function storeSessionMemories(
+  dbPath: string,
+  projectId: string,
+  shortTerm: MemoryEntry[],
+  longTerm: MemoryEntry[]
+): number {
+  const db = new Database(dbPath);
+  ensureSessionSchema(db);
+
+  const entries = [...shortTerm, ...longTerm.filter((m) => (m.importance || 0) >= 7)];
+  const unique = new Map(entries.map((m) => [m.content, m]));
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO session_memories (session_id, timestamp, type, content, importance)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  const insertMany = db.transaction((items: MemoryEntry[]) => {
+    let inserted = 0;
+    for (const entry of items) {
+      inserted += stmt.run(
+        projectId,
+        entry.timestamp,
+        entry.type,
+        entry.content,
+        entry.importance ?? 5
+      ).changes;
+    }
+    return inserted;
+  });
+
+  const inserted = insertMany([...unique.values()]);
+  db.close();
+  return inserted;
+}
+
+function storeKnowledgeGraph(
+  dbPath: string,
+  projectName: string,
+  longTerm: MemoryEntry[],
+  skills: DiscoveredSkill[]
+): { entities: number; relationships: number } {
+  const db = new Database(dbPath);
+  ensureKnowledgeSchema(db);
+  const now = new Date().toISOString();
+
+  const projectEntity = upsertEntity(db, 'project', projectName, now);
+  let entities = projectEntity.inserted;
+  let relationships = 0;
+
+  const filePaths = new Set<string>();
+  for (const entry of longTerm) {
+    const file = entry.metadata?.file;
+    if (typeof file === 'string') filePaths.add(file);
+    const files = entry.metadata?.files;
+    if (Array.isArray(files)) {
+      for (const item of files) {
+        if (typeof item === 'string') filePaths.add(item);
+      }
+    }
+  }
+
+  for (const file of filePaths) {
+    const fileEntity = upsertEntity(db, 'file', file, now);
+    entities += fileEntity.inserted;
+    relationships += insertRelationship(db, projectEntity.id, fileEntity.id, 'contains', now);
+  }
+
+  for (const skill of skills) {
+    const skillEntity = upsertEntity(db, skill.type, skill.name, now);
+    entities += skillEntity.inserted;
+    relationships += insertRelationship(db, projectEntity.id, skillEntity.id, 'contains', now);
+  }
+
+  db.close();
+  return { entities, relationships };
+}
+
+function ensureSessionSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS session_memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      importance INTEGER DEFAULT 5
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_session_unique ON session_memories(session_id, content);
+    CREATE INDEX IF NOT EXISTS idx_session_id ON session_memories(session_id);
+    CREATE INDEX IF NOT EXISTS idx_session_timestamp ON session_memories(timestamp);
+  `);
+}
+
+function ensureKnowledgeSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS entities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      first_seen TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      mention_count INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(type, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
+
+    CREATE TABLE IF NOT EXISTS relationships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id INTEGER NOT NULL,
+      target_id INTEGER NOT NULL,
+      relation TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      UNIQUE(source_id, target_id, relation),
+      FOREIGN KEY (source_id) REFERENCES entities(id),
+      FOREIGN KEY (target_id) REFERENCES entities(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
+    CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
+  `);
+}
+
+function upsertEntity(
+  db: Database.Database,
+  type: string,
+  name: string,
+  now: string
+): { id: number; inserted: number } {
+  const existing = db.prepare('SELECT id, mention_count FROM entities WHERE type = ? AND name = ?').get(type, name) as { id: number; mention_count: number } | undefined;
+  if (existing) {
+    db.prepare('UPDATE entities SET last_seen = ?, mention_count = ? WHERE id = ?').run(now, existing.mention_count + 1, existing.id);
+    return { id: existing.id, inserted: 0 };
+  }
+
+  const result = db.prepare('INSERT INTO entities (type, name, first_seen, last_seen, mention_count) VALUES (?, ?, ?, ?, 1)').run(type, name, now, now);
+  return { id: Number(result.lastInsertRowid), inserted: 1 };
+}
+
+function insertRelationship(db: Database.Database, sourceId: number, targetId: number, relation: string, now: string): number {
+  const result = db.prepare('INSERT OR IGNORE INTO relationships (source_id, target_id, relation, timestamp) VALUES (?, ?, ?, ?)').run(sourceId, targetId, relation, now);
+  return result.changes;
+}
+
+function createDeterministicEmbedding(input: string, size = 384): number[] {
+  const hash = createHash('sha256').update(input).digest();
+  let seed = hash.readUInt32LE(0);
+  const vector = new Array<number>(size);
+
+  for (let i = 0; i < size; i += 1) {
+    seed ^= seed << 13;
+    seed ^= seed >> 17;
+    seed ^= seed << 5;
+    const normalized = (seed >>> 0) / 0xffffffff;
+    vector[i] = normalized * 2 - 1;
+  }
+
+  return vector;
+}
+
+function toDeterministicUuid(value: string): string {
+  const hash = createHash('sha256').update(value).digest('hex');
+  const timeLow = hash.slice(0, 8);
+  const timeMid = hash.slice(8, 12);
+  const timeHighAndVersion = `5${hash.slice(13, 16)}`;
+  const clockSeq = ((parseInt(hash.slice(16, 18), 16) & 0x3f) | 0x80).toString(16).padStart(2, '0');
+  const clockSeqLow = hash.slice(18, 20);
+  const node = hash.slice(20, 32);
+  return `${timeLow}-${timeMid}-${timeHighAndVersion}-${clockSeq}${clockSeqLow}-${node}`;
+}
+
+async function storeLongTermToQdrant(
+  longTerm: MemoryEntry[],
+  config: AgentContextConfig
+): Promise<{ stored: number; backend: string; reason?: string }> {
+  if (longTerm.length === 0) {
+    return { stored: 0, backend: 'qdrant', reason: 'No long-term entries' };
+  }
+  if (config.memory?.longTerm?.provider === 'github') {
+    return { stored: 0, backend: 'github', reason: 'Long-term provider set to github' };
+  }
+  const endpoint = config.memory?.longTerm?.endpoint || 'localhost:6333';
+  const url = endpoint.startsWith('http://') || endpoint.startsWith('https://') ? endpoint : `http://${endpoint}`;
+  const apiKey = config.memory?.longTerm?.qdrantCloud?.apiKey || process.env.QDRANT_API_KEY;
+  const collection = config.memory?.longTerm?.collection || 'agent_memory';
+
+  const client = new QdrantClient({ url, apiKey });
+  try {
+    await client.getCollections();
+  } catch {
+    return { stored: 0, backend: 'qdrant', reason: 'Qdrant not reachable' };
+  }
+
+  try {
+    const collections = await client.getCollections();
+    let collectionName = collection;
+    const exists = collections.collections.some((c) => c.name === collectionName);
+    if (exists) {
+      const info = await client.getCollection(collectionName);
+      const size = (info.config as { params?: { vectors?: { size?: number } } }).params?.vectors?.size;
+      if (size && size !== 384) {
+        collectionName = `${collectionName}_prepopulated`;
+      }
+    }
+
+    const finalExists = collections.collections.some((c) => c.name === collectionName);
+    if (!finalExists) {
+      await client.createCollection(collectionName, { vectors: { size: 384, distance: 'Cosine' } });
+    }
+
+    const batchSize = 64;
+    for (let i = 0; i < longTerm.length; i += batchSize) {
+      const batch = longTerm.slice(i, i + batchSize);
+      const points = batch.map((entry) => ({
+        id: toDeterministicUuid(entry.id),
+        vector: createDeterministicEmbedding(`${entry.content} ${entry.tags?.join(' ') || ''}`),
+        payload: {
+          timestamp: entry.timestamp,
+          type: entry.type,
+          content: entry.content,
+          tags: entry.tags,
+          importance: entry.importance,
+          ...entry.metadata,
+        },
+      }));
+
+      await client.upsert(collectionName, { points });
+    }
+
+    return { stored: longTerm.length, backend: `qdrant (${url}, ${collectionName})` };
+  } catch (error) {
+    return { stored: 0, backend: `qdrant (${url})`, reason: error instanceof Error ? error.message : 'Qdrant error' };
   }
 }
