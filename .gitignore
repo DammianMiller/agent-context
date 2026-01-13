@@ -30,6 +30,10 @@ yarn-error.log*
 coverage/
 
 # Memory databases (local development)
+!agents/data/memory/short_term.db
+!agents/data/coordination/coordination.db
+!agents/data/memory/*.db
+!agents/data/memory/*.db-journal
 *.db
 *.db-journal
 
