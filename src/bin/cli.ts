@@ -32,12 +32,10 @@ program
   .command('init')
   .description('Initialize agent context in the current project')
   .option('-p, --platform <platforms...>', 'Target platforms (claude, factory, vscode, opencode, all)', ['all'])
-  .option('--web', 'Quick setup for web platforms (claude.ai, factory.ai)')
-  .option('--desktop', 'Quick setup for desktop platforms (Claude Code, VSCode)')
-  .option('--interactive', 'Interactive setup with all options')
-  .option('--with-memory', 'Set up memory system (SQLite + Qdrant)')
-  .option('--with-worktrees', 'Set up git worktree workflow')
-  .option('--force', 'Overwrite existing configuration')
+  .option('--web', 'Generate AGENT.md for web platforms (claude.ai, factory.ai)')
+  .option('--no-memory', 'Skip memory system setup')
+  .option('--no-worktrees', 'Skip worktree workflow setup')
+  .option('-f, --force', 'Overwrite existing configuration')
   .action(initCommand);
 
 program

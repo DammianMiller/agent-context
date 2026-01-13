@@ -24,9 +24,7 @@
     "shortTerm": {
       "enabled": true,
       "path": "./agents/data/memory/short_term.db",
-      "webDatabase": "agent_context_memory",
-      "maxEntries": 50,
-      "forceDesktop": false
+      "maxEntries": 50
     },
     "longTerm": {
       "enabled": true,

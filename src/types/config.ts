@@ -8,11 +8,11 @@ export const ShortTermMemorySchema = z.object({
   enabled: z.boolean().default(true),
   // Desktop: SQLite path
   path: z.string().default('./agents/data/memory/short_term.db'),
-  // Web: IndexedDB database name
-  webDatabase: z.string().default('agent_context_memory'),
+  // Web: IndexedDB database name (optional - if set, uses web template)
+  webDatabase: z.string().optional(),
   maxEntries: z.number().default(50),
-  // Force desktop mode even if window exists (for testing)
-  forceDesktop: z.boolean().default(false),
+  // Force desktop mode even if webDatabase is set
+  forceDesktop: z.boolean().optional(),
 });
 
 export const GitHubMemoryBackendSchema = z.object({

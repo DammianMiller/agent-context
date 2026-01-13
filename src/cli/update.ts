@@ -147,7 +147,7 @@ export async function updateCommand(options: UpdateOptions): Promise<void> {
   console.log('What was updated:');
   console.log('  • Template structure and formatting');
   console.log('  • Standard sections (decision loop, memory system, etc.)');
-  console.log('  • Code Field integration (v8.0)');
+  console.log('  • Code Field cognitive environment (v9.0)');
   console.log('  • Inhibition-style directives');
   console.log('');
   console.log(chalk.dim(`Backup saved at: ${backupPath}`));

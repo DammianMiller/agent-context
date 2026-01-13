@@ -10,10 +10,8 @@ import type { AgentContextConfig, Platform } from '../types/index.js';
 interface InitOptions {
   platform: string[];
   web?: boolean;
-  desktop?: boolean;
-  interactive?: boolean;
-  withMemory?: boolean;
-  withWorktrees?: boolean;
+  memory?: boolean;     // --no-memory sets this to false
+  worktrees?: boolean;  // --no-worktrees sets this to false
   force?: boolean;
 }
 
@@ -59,10 +57,10 @@ export async function initCommand(options: InitOptions): Promise<void> {
   console.log(chalk.dim(`  Frameworks: ${analysis.frameworks.join(', ') || 'none detected'}`));
   console.log(chalk.dim(`  Databases: ${analysis.databases.map((d) => d.type).join(', ') || 'none detected'}`));
 
-  // Auto-enable memory and worktrees unless explicitly disabled
+  // Auto-enable memory and worktrees unless explicitly disabled via --no-memory/--no-worktrees
   // No prompts - just works
-  const withMemory = options.withMemory !== false;
-  const withWorktrees = options.withWorktrees !== false;
+  const withMemory = options.memory !== false;
+  const withWorktrees = options.worktrees !== false;
 
   // Load existing config if present to preserve user customizations
   let existingConfig: Partial<AgentContextConfig> = {};
@@ -94,9 +92,9 @@ export async function initCommand(options: InitOptions): Promise<void> {
           shortTerm: {
             enabled: true,
             path: existingConfig.memory?.shortTerm?.path || './agents/data/memory/short_term.db',
-            webDatabase: existingConfig.memory?.shortTerm?.webDatabase || 'agent_context_memory',
+            // Only set webDatabase if --web flag is used (for web platforms like claude.ai)
+            ...(options.web ? { webDatabase: existingConfig.memory?.shortTerm?.webDatabase || 'agent_context_memory' } : {}),
             maxEntries: existingConfig.memory?.shortTerm?.maxEntries || 50,
-            forceDesktop: existingConfig.memory?.shortTerm?.forceDesktop || false,
           },
           longTerm: {
             enabled: true,
