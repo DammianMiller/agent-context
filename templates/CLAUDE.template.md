@@ -119,6 +119,8 @@ uam agent status                                  # Check other active agents
 
 ## 🤖 MULTI-AGENT COORDINATION PROTOCOL
 
+**Parallel-first rule**: When safe, run independent tool calls in parallel (searches, reads, status checks) and invoke multiple subagents concurrently for review. Optimize for fewer turns and lower tokens without losing accuracy.
+
 ### Before Claiming Any Work
 
 ```bash
@@ -159,6 +161,13 @@ Task(subagent_type: "code-quality-guardian", ...)
 Task(subagent_type: "security-auditor", ...)      # Runs concurrently
 Task(subagent_type: "performance-optimizer", ...) # Runs concurrently
 
+# ALSO: Parallelize tool calls when independent
+multi_tool_use.parallel([
+  { tool: "Grep", ... },
+  { tool: "Read", ... },
+  { tool: "LS", ... }
+])
+
 # CORRECT: Coordinate merge order for overlapping changes
 # Agent A finishes first → merges first
 # Agent B rebases → merges second
@@ -174,6 +183,17 @@ Task(subagent_type: "performance-optimizer", ...) # Runs concurrently
 | Performance | `performance-optimizer` | algorithms, memory, caching |
 | Documentation | `documentation-expert` | jsdoc, readme, api-docs |
 | Code quality | `code-quality-guardian` | complexity, naming, solid |
+
+**Default**: If a task can benefit from a specialized droid, invoke it before implementation.
+
+---
+
+## 🧾 TOKEN EFFICIENCY RULES
+
+- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
+- Summarize command output; quote only the lines needed for decisions.
+- Use parallel tool calls to reduce back-and-forth.
+- Ask for clarification only when necessary to proceed correctly.
 
 ---
 
