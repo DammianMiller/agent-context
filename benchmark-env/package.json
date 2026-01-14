@@ -1,0 +1,12 @@
+{
+  "name": "benchmark-test-project",
+  "version": "1.0.0",
+  "description": "Test project for Terminal-Bench adapter benchmark",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc",
+    "lint": "eslint src --ext .ts",
+    "docs": "vitepress build"
+  }
+}
