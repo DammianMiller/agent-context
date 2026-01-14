@@ -1,14 +1,24 @@
 <!--
-  CLAUDE.md Universal Template - v6.0
+  CLAUDE.md Universal Template - v9.0
   
-  OPTIMIZATIONS IN THIS VERSION:
-  - 30% token reduction via compression and deduplication
-  - Multi-agent coordination protocol (P0)
-  - Session memory enforcement (P0)
-  - Parallel droid invocation patterns (P1)
-  - Dynamic task routing (P1)
-  - Capability-based agent routing (P2)
-  - Modular conditional sections (P3)
+  CHANGES IN THIS VERSION:
+  - Fully universal with Handlebars placeholders (no hardcoded project content)
+  - Context Field integration with Code Field prompt
+  - Inhibition-style directives ("Do not X" creates blockers)
+  - Optimized token usage with conditional sections
+  - Database protection (memory persists with project)
+  
+  CODE FIELD ATTRIBUTION:
+  The Code Field prompt technique is based on research from:
+  https://github.com/NeoVertex1/context-field
+  
+  Context Field is experimental research on context field prompts and cognitive
+  regime shifts in large language models. The code_field.md prompt produces:
+  - 100% assumption stating (vs 0% baseline)
+  - 89% bug detection in code review (vs 39% baseline)
+  - 100% refusal of impossible requests (vs 0% baseline)
+  
+  License: Research shared for exploration and reuse with attribution.
   
   Core Variables:
     universal-agent-memory, , main, January 2026
@@ -27,17 +37,18 @@
     agents/docker-compose.yml
   
   Commands:
-    npm test, npm run build, npm run lint, 
+    npm test, npm run build, npm run lint
 -->
 
 <coding_guidelines>
 
 # universal-agent-memory - Autonomous Agent Guide
 
+> Universal AI agent memory system - CLAUDE.md templates, memory, worktrees for Claude Code, Factory.AI, VSCode, OpenCode
 
 ---
 
-## 🔴 DIRECTIVE HIERARCHY
+## � � DIRECTIVE HIERARCHY
 
 | Priority | Source | Override |
 |----------|--------|----------|
@@ -47,6 +58,49 @@
 | 4-LOW | Best practices | By #1-3 |
 
 **DEFAULT**: Follow ALL directives without asking permission.
+
+---
+
+---
+
+## � � CODE FIELD - COGNITIVE ENVIRONMENT
+
+**Apply to ALL code generation. Creates conditions where better code emerges naturally.**
+
+### Core Inhibitions
+
+```
+Do not write code before stating assumptions.
+Do not claim correctness you haven't verified.
+Do not handle only the happy path.
+Under what conditions does this work?
+```
+
+### Before Writing Code
+
+- What are you assuming about the input?
+- What are you assuming about the environment?
+- What would break this?
+- What would a malicious caller do?
+
+### Do Not
+
+- Write code before stating assumptions
+- Claim correctness you haven't verified
+- Handle the happy path and gesture at the rest
+- Import complexity you don't need
+- Solve problems you weren't asked to solve
+- Produce code you wouldn't want to debug at 3am
+
+### Expected Output Format
+
+**Before code**: Assumptions stated explicitly, scope bounded
+**In code**: Smaller than expected, edge cases handled or explicitly rejected
+**After code**: "What this handles" and "What this does NOT handle" sections
+
+*Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
+
+---
 
 ---
 
@@ -65,7 +119,11 @@ uam agent status                                  # Check other active agents
 
 ---
 
-## 🤖 MULTI-AGENT COORDINATION PROTOCOL
+---
+
+## � � MULTI-AGENT COORDINATION PROTOCOL
+
+**Parallel-first rule**: When safe, run independent tool calls in parallel (searches, reads, status checks) and invoke multiple subagents concurrently for review. Optimize for fewer turns and lower tokens without losing accuracy.
 
 ### Before Claiming Any Work
 
@@ -107,6 +165,13 @@ Task(subagent_type: "code-quality-guardian", ...)
 Task(subagent_type: "security-auditor", ...)      # Runs concurrently
 Task(subagent_type: "performance-optimizer", ...) # Runs concurrently
 
+# ALSO: Parallelize tool calls when independent
+multi_tool_use.parallel([
+  { tool: "Grep", ... },
+  { tool: "Read", ... },
+  { tool: "LS", ... }
+])
+
 # CORRECT: Coordinate merge order for overlapping changes
 # Agent A finishes first → merges first
 # Agent B rebases → merges second
@@ -123,9 +188,13 @@ Task(subagent_type: "performance-optimizer", ...) # Runs concurrently
 | Documentation | `documentation-expert` | jsdoc, readme, api-docs |
 | Code quality | `code-quality-guardian` | complexity, naming, solid |
 
+**Default**: If a task can benefit from a specialized droid, invoke it before implementation.
+
 ---
 
-## 🧩 MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
+---
+
+## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
 
 **Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
 
@@ -160,7 +229,9 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
-## 🛠️ SKILLFORGE MODE (OPTIONAL)
+---
+
+## � �️ SKILLFORGE MODE (OPTIONAL)
 
 **Use when**: The request is to create, improve, or compose skills (not regular feature work).
 
@@ -173,7 +244,22 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 **Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
 
-## 📋 MANDATORY DECISION LOOP
+---
+
+---
+
+## � � TOKEN EFFICIENCY RULES
+
+- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
+- Summarize command output; quote only the lines needed for decisions.
+- Use parallel tool calls to reduce back-and-forth.
+- Ask for clarification only when necessary to proceed correctly.
+
+---
+
+---
+
+## � � MANDATORY DECISION LOOP
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -187,12 +273,12 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 │  2. AGENTS   │ uam agent overlaps --resource "<files>"          │
 │              │ If overlap: coordinate or wait                    │
 │                                                                  │
-│  3. SKILLS   │ Check .factory/skills// for applicable skill      │
+│  3. SKILLS   │ Check .factory/skills/ for applicable skill        │
 │              │ Invoke BEFORE implementing                        │
 │                                                                  │
 │  4. WORKTREE │ uam worktree create <slug>                   │
 │              │ cd .worktrees/NNN-<slug>/                  │
-│              │ NEVER commit directly to main               │
+│              │ NEVER commit directly to main      │
 │                                                                  │
 │  5. WORK     │ Implement → Test → uam worktree pr           │
 │                                                                  │
@@ -207,7 +293,9 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
-## 🧠 FOUR-LAYER MEMORY SYSTEM
+---
+
+## � � FOUR-LAYER MEMORY SYSTEM
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -233,7 +321,7 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 # L1: Working Memory
 sqlite3 ./agents/data/memory/short_term.db "INSERT INTO memories (timestamp,type,content) VALUES (datetime('now'),'action','...');"
 
-# L2: Session Memory (NEW)
+# L2: Session Memory
 sqlite3 ./agents/data/memory/short_term.db "INSERT INTO session_memories (session_id,timestamp,type,content,importance) VALUES ('current',datetime('now'),'decision','...',7);"
 
 # L3: Semantic Memory  
@@ -258,7 +346,9 @@ effective_importance = importance × (0.95 ^ days_since_access)
 
 ---
 
-## 🌳 WORKTREE WORKFLOW
+---
+
+## � � WORKTREE WORKFLOW
 
 **ALL code changes use worktrees. NO EXCEPTIONS.**
 
@@ -282,7 +372,9 @@ uam worktree cleanup <id>
 
 ---
 
-## 🚀 PARALLEL REVIEW PROTOCOL
+---
+
+## � � PARALLEL REVIEW PROTOCOL
 
 **Before ANY commit/PR, invoke quality droids in PARALLEL:**
 
@@ -308,6 +400,8 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 
 ---
 
+---
+
 ## ⚡ AUTOMATIC TRIGGERS
 
 | Pattern | Action |
@@ -321,7 +415,9 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 
 ---
 
-## 📁 REPOSITORY STRUCTURE
+---
+
+## � � REPOSITORY STRUCTURE
 
 ```
 universal-agent-memory/
@@ -344,31 +440,29 @@ universal-agent-memory/
 │   └── research/                  
 │
 ├── .factory/                      # Factory AI configuration
+│   ├── commands/                  # CLI commands
 │   ├── droids/                    # Custom AI agents
-│   └── skills/                    # Reusable skills
+│   ├── scripts/                   # Automation scripts
+│   ├── skills/                    # Reusable skills
+│   └── templates/                 
 │
 ├── .github/                       # GitHub configuration
 │   └── workflows/                 # CI/CD pipelines
 ```
 
+---
 
 ---
 
-
-
-
-
 ---
 
-## 📋 Quick Reference
-
+## � � Quick Reference
 
 ### URLs
 - **URL**: https://img.shields.io/npm/v/universal-agent-memory.svg
 - **URL**: https://www.npmjs.com/package/universal-agent-memory
 - **URL**: https://img.shields.io/badge/License-MIT-yellow.svg
 - **URL**: https://opensource.org/licenses/MIT
-- **URL**: https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/scripts/install-desktop.sh
 
 ### Workflows
 ```
@@ -387,50 +481,57 @@ npm run build
 
 ---
 
-
 ### Language Droids
 | Droid | Purpose |
 |-------|---------|
 | `javascript-pro` | ES6+, async patterns, Node.js, promises, event loops |
 
-### Commands
-| Command | Purpose |
-|---------|---------|
-| `/worktree` | Manage worktrees (create, list, pr, cleanup) |
-| `/code-review` | Full parallel review pipeline |
-| `/pr-ready` | Validate branch, create PR |
-
+---
 
 ---
 
+## � � Testing Requirements
 
-## 🧪 Testing Requirements
 1. Create worktree
 2. Update/create tests
 3. Run `npm test`
 4. Run linting
 5. Create PR
 
+---
 
 ---
 
-## 🔧 Troubleshooting
+## � � Troubleshooting
+
 | Symptom | Solution |
 |---------|----------|
 | uam task create --title "Fix auth bug" --type bug --priority... | See memory for details |
 | uam task claim <id>                        # Claim task (ann... | See memory for details |
+| Feature added: feat(template): add mandatory completion prot... | See memory for details |
+| [image: npm version]
+[image: License: MIT]
+
+**Give your AI c... | See memory for details |
+| Work isn't "done" until it's deployed and verified:
+
+[code b... | See memory for details |
+| **Close-Out**: Merge → Deploy → Monitor → Fix loop until 100... | See memory for details |
 | """
     # Group by type
     actions = [e for e in short_term... | See memory for details |
 | **Semantic Memory** (Qdrant: `claude_memory` collection)
 
   ... | See memory for details |
+| fix: update command uses correct template, consolidate CLI options|Fixes: | - Fixed Zod schema defaulting webDatabase which forced web t |
 | fix: read version from package | json instead of hardcoding|- CLI now dynamically reads versi |
 | fix: improve install scripts with GitHub fallback and add npm publish workflow|- Install scripts now fall back to cloning from GitHub if npm package unavailable | - Install to ~/.universal-agent-memory for persistent instal |
 | fix: update URLs to use raw GitHub URLs and fix npm publishing|- Replace non-existent universal-agent-memory | dev URLs with raw GitHub URLs. - Add publishConfig for npm p |
-| Feature added: feat(template): add mandatory completion prot... | See memory for details |
 
-## ⚙️ Config Files
+---
+
+## ⚙ ️ Config Files
+
 | File | Purpose |
 |------|---------|
 | `README.md` | Project documentation |
@@ -439,6 +540,8 @@ npm run build
 | `tsconfig.json` | TypeScript configuration |
 | `.gitignore` | Git ignore patterns |
 | `.prettierrc` | Prettier configuration |
+
+---
 
 ---
 
@@ -456,7 +559,9 @@ npm run build
 
 ---
 
-## 🔄 COMPLETION PROTOCOL - MANDATORY
+---
+
+## � � COMPLETION PROTOCOL - MANDATORY
 
 **WORK IS NOT DONE UNTIL 100% COMPLETE. ALWAYS FOLLOW THIS SEQUENCE:**
 
@@ -520,59 +625,180 @@ uam worktree create hotfix-<issue>
 
 ---
 
-## 📊 Project Knowledge
+---
+
+## � � Project Knowledge
 
 ### Recent Activity
 - [image: npm version]
 [image: License: MIT]
 
-A complete autonomous agent operating system for AI codi...
-- UAM transforms AI coding assistants into autonomous agents with:
+**Give your AI coding assistant persistent memory, intel...
+- ```
 
-- **4-Layer Memory System** - Work...
-- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
-- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
-- uam task create --title "My first task" --type task
-- uam task claim <task-id>
-uam worktree create my-feature
-```
-- A complete task tracking system integrated with memory and coordination.
+No clicking through prompts. No manual configuration. It just works.
+- **Your AI's context is NOT limited to the conversation.**
+
+Memory persists with the project in SQLit...
+- Tasks automatically route to specialized expert droids:
+
+| Task Type | Routed To | Result |
+|-------...
+- Based on context-field research, UAM includes a 4-line prompt that dramatically improves code qualit...
+- **The AI never commits directly to main.**
+
+All changes use worktrees:
 
 ```bash
-- uam task create --title "Fix auth bug" --type bug --priority 0
-uam task create --title "Add dark mod...
-- uam task list                              # All open tasks
-uam task ready                          ...
-- uam task claim <id>                        # Claim task (announces to other agents)
-uam task show <i...
+- Work isn't "done" until it's deployed and verified:
+
+[code block]
+
+The AI follows this loop automati...
+- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
+- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
+- | Command | Description |
+|---------|-------------|
+| `uam init` | Initialize/update UAM (auto-merge...
 
 ### Lessons
 - **general, universal**: [image: npm version]
 [image: License: MIT]
 
-A complete autonomous agent operatin...
-- **general, what**: UAM transforms AI coding assistants into autonomous agents with:
+**Give your AI coding assistant pers...
+- **general, that's**: ```
 
-- **4-Layer Me...
+No clicking through prompts. No manual configuration. It just works....
+- **general, endless**: **Your AI's context is NOT limited to the conversation.**
+
+Memory persists with ...
+- **general, intelligent**: Tasks automatically route to specialized expert droids:
+
+| Task Type | Routed To...
+- **general, code**: Based on context-field research, UAM includes a 4-line prompt that dramatically ...
+- **general, safe**: **The AI never commits directly to main.**
+
+All changes use worktrees:
+
+```bash...
+- **general, complete**: Work isn't "done" until it's deployed and verified:
+
+[code block]
+
+The AI follow...
 - **general, desktop**: bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agen...
 - **general, browsers**: bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agen...
-- **general, create**: uam task create --title "My first task" --type task...
-- **general, start**: uam task claim <task-id>
-uam worktree create my-feature
-```...
-- **general, task**: A complete task tracking system integrated with memory and coordination.
-
-```bas...
-- **general, create**: uam task create --title "Fix auth bug" --type bug --priority 0
-uam task create -...
-- **general, view**: uam task list                              # All open tasks
-uam task ready      ...
-- **general, work**: uam task claim <id>                        # Claim task (announces to other agen...
+- **general, essential**: | Command | Description |
+|---------|-------------|
+| `uam init` | Initialize/up...
 
 ### Gotchas
 No gotchas recorded yet.
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (15 changes), templates/CLAUDE.template.md (13 changes), src/generators/claude-md.ts (9 changes), package-lock.json (7 changes), README.md (6 changes), CLAUDE.md (5 changes), scripts/install-desktop.sh (5 changes), web/generator.html (5 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (25 changes), package-lock.json (17 changes), templates/CLAUDE.template.md (17 changes), src/generators/claude-md.ts (10 changes), README.md (8 changes), CLAUDE.md (7 changes), src/cli/init.ts (7 changes), src/cli/memory.ts (6 changes), src/bin/cli.ts (6 changes), scripts/install-desktop.sh (5 changes). These files may need extra attention during changes.
 
 </coding_guidelines>
+
+---
+
+---
+
+## Repository Structure
+
+```
+universal-agent-memory/
+├── src/                           # Source code
+│   ├── analyzers/                 
+│   ├── bin/                       
+│   ├── cli/                       
+│   ├── coordination/              
+│   ├── generators/                
+│   ├── memory/                    
+│   ├── tasks/                     
+│   └── types/                     
+│
+├── tools/                         # Development tools
+│   └── agents/                    
+│
+├── scripts/                       # Automation scripts
+│
+├── docs/                          # Documentation
+│   └── research/                  
+│
+├── .factory/                      # Factory AI configuration
+│   ├── commands/                  # CLI commands
+│   ├── droids/                    # Custom AI agents
+│   ├── scripts/                   # Automation scripts
+│   ├── skills/                    # Reusable skills
+│   └── templates/                 
+│
+├── .github/                       # GitHub configuration
+│   └── workflows/                 # CI/CD pipelines
+```
+
+---
+
+<!-- Custom Sections (preserved from existing file) -->
+
+## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
+
+**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
+
+**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
+
+**Process**:
+1. **Decompose** the request into discrete work items with clear inputs/outputs.
+2. **Map dependencies** (A blocks B). Only run B after A is complete.
+3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
+4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
+5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
+
+**When to expand the agent pool**:
+- Multiple files/modules with low coupling
+- Parallel research or analysis tasks
+- Independent test or verification tasks
+
+**Example**:
+```bash
+# Parallel research tasks (dependency-free)
+Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
+Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
+
+# Dependent work (sequential)
+# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
+```
+
+**Conflict avoidance**:
+- One agent per file at a time
+- Declare file ownership in prompts
+- If overlap risk is high, wait or split by section
+
+---
+
+---
+
+## � �️ SKILLFORGE MODE (OPTIONAL)
+
+**Use when**: The request is to create, improve, or compose skills (not regular feature work).
+
+**Phases**:
+0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
+1. **Deep Analysis** (multi‑lens, edge cases, constraints)
+2. **Specification** (structured skill spec)
+3. **Generation** (implement skill)
+4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
+
+**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
+
+---
+
+## � � Testing Requirements
+
+1. Create worktree
+2. Update/create tests
+3. Run `npm test`
+4. Run linting
+5. Create PR
+
+---
