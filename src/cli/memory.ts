@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { QdrantClient } from '@qdrant/js-client-rest';
 import { prepopulateMemory } from '../memory/prepopulate.js';
 import { SQLiteShortTermMemory } from '../memory/short-term/sqlite.js';
+import { ensureKnowledgeSchema, ensureSessionSchema } from '../memory/short-term/schema.js';
 import { AgentContextConfigSchema } from '../types/index.js';
 import type { AgentContextConfig } from '../types/index.js';
 import type { MemoryEntry } from '../memory/backends/base.js';
@@ -553,49 +554,6 @@ function storeKnowledgeGraph(
   return { entities, relationships };
 }
 
-function ensureSessionSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS session_memories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      session_id TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
-      type TEXT NOT NULL,
-      content TEXT NOT NULL,
-      importance INTEGER DEFAULT 5
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_session_unique ON session_memories(session_id, content);
-    CREATE INDEX IF NOT EXISTS idx_session_id ON session_memories(session_id);
-    CREATE INDEX IF NOT EXISTS idx_session_timestamp ON session_memories(timestamp);
-  `);
-}
-
-function ensureKnowledgeSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS entities (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL,
-      name TEXT NOT NULL,
-      first_seen TEXT NOT NULL,
-      last_seen TEXT NOT NULL,
-      mention_count INTEGER NOT NULL DEFAULT 1,
-      UNIQUE(type, name)
-    );
-    CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(type);
-
-    CREATE TABLE IF NOT EXISTS relationships (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      source_id INTEGER NOT NULL,
-      target_id INTEGER NOT NULL,
-      relation TEXT NOT NULL,
-      timestamp TEXT NOT NULL,
-      UNIQUE(source_id, target_id, relation),
-      FOREIGN KEY (source_id) REFERENCES entities(id),
-      FOREIGN KEY (target_id) REFERENCES entities(id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
-    CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_id);
-  `);
-}
 
 function upsertEntity(
   db: Database.Database,

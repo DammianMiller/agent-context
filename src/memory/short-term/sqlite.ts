@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { ensureShortTermSchema } from './schema.js';
 import type { ShortTermMemoryBackend } from './factory.js';
 
 interface ShortTermMemory {
@@ -32,17 +33,7 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
   }
 
   private initSchema(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS memories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        type TEXT NOT NULL CHECK(type IN ('action', 'observation', 'thought', 'goal')),
-        content TEXT NOT NULL,
-        project_id TEXT NOT NULL DEFAULT 'default'
-      );
-      CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
-      CREATE INDEX IF NOT EXISTS idx_memories_timestamp ON memories(timestamp);
-    `);
+    ensureShortTermSchema(this.db);
   }
 
   async store(type: ShortTermMemory['type'], content: string): Promise<void> {
