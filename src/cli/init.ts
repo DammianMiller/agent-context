@@ -5,6 +5,7 @@ import { join } from 'path';
 import { analyzeProject } from '../analyzers/index.js';
 import { generateClaudeMd } from '../generators/claude-md.js';
 import { mergeClaudeMd } from '../utils/merge-claude-md.js';
+import { initializeMemoryDatabase } from '../memory/short-term/schema.js';
 import type { AgentContextConfig, Platform } from '../types/index.js';
 
 interface InitOptions {
@@ -164,6 +165,19 @@ export async function initCommand(options: InitOptions): Promise<void> {
   } catch (error) {
     dirsSpinner.fail('Failed to create directories');
     console.error(chalk.red(error));
+  }
+
+  if (withMemory) {
+    const memorySpinner = ora('Initializing memory database...').start();
+    try {
+      const dbPath = config.memory?.shortTerm?.path || './agents/data/memory/short_term.db';
+      const fullDbPath = join(cwd, dbPath);
+      initializeMemoryDatabase(fullDbPath);
+      memorySpinner.succeed('Memory database initialized');
+    } catch (error) {
+      memorySpinner.fail('Failed to initialize memory database');
+      console.error(chalk.red(error));
+    }
   }
 
   // Generate/Update CLAUDE.md - always merge, never overwrite
