@@ -545,6 +545,53 @@ function generateMarkdownReport(report: BenchmarkReport): string {
 }
 
 // ============================================================================
+// Parallel Execution Utilities
+// ============================================================================
+
+/**
+ * Run multiple model benchmarks in parallel with configurable concurrency
+ */
+async function runModelsInParallel(
+  models: ModelConfig[],
+  tasks: BenchmarkTask[],
+  config: {
+    useMemory: boolean;
+    useHierarchicalPrompting: boolean;
+    maxTurns: number;
+    apiKey: string;
+    verbose: boolean;
+  },
+  concurrency: number
+): Promise<ModelResult[]> {
+  const results: ModelResult[] = [];
+  const queue = [...models];
+  const inProgress: Promise<void>[] = [];
+  
+  const runNext = async (): Promise<void> => {
+    const model = queue.shift();
+    if (!model) return;
+    
+    const result = await runBenchmarkForModel(model, tasks, config);
+    results.push(result);
+    
+    if (queue.length > 0) {
+      await runNext();
+    }
+  };
+  
+  // Start initial batch up to concurrency limit
+  const initialBatch = Math.min(concurrency, models.length);
+  for (let i = 0; i < initialBatch; i++) {
+    inProgress.push(runNext());
+  }
+  
+  await Promise.all(inProgress);
+  
+  // Sort results to match original model order
+  return models.map(m => results.find(r => r.modelId === m.id)!).filter(Boolean);
+}
+
+// ============================================================================
 // Main Entry Point
 // ============================================================================
 
@@ -555,6 +602,7 @@ export async function runImprovedBenchmark(options: {
   maxTurns?: number;
   useHierarchicalPrompting?: boolean;
   verbose?: boolean;
+  parallelModels?: number;
 } = {}): Promise<BenchmarkReport> {
   const apiKey = options.apiKey || process.env.FACTORY_API_KEY || process.env.DROID_API_KEY;
   if (!apiKey) {
@@ -569,6 +617,11 @@ export async function runImprovedBenchmark(options: {
   const maxTurns = options.maxTurns ?? 2;
   const useHierarchicalPrompting = options.useHierarchicalPrompting ?? true;
   const verbose = options.verbose ?? false;
+  const parallelModels = options.parallelModels ?? 1;
+  
+  // Determine effective parallelism
+  const effectiveParallel = Math.min(parallelModels, modelsToTest.length);
+  const isParallel = effectiveParallel > 1;
   
   console.log('\n' + '█'.repeat(60));
   console.log('   UAM IMPROVED BENCHMARK');
@@ -578,42 +631,61 @@ export async function runImprovedBenchmark(options: {
   console.log(`Max Turns: ${maxTurns}`);
   console.log(`Memory Comparison: ${compareMemory}`);
   console.log(`Hierarchical Prompting: ${useHierarchicalPrompting}`);
+  console.log(`Parallel Models: ${effectiveParallel}${isParallel ? ' (ENABLED)' : ' (sequential)'}`);
   
-  const withoutMemoryResults: ModelResult[] = [];
-  const withMemoryResults: ModelResult[] = [];
+  let withoutMemoryResults: ModelResult[] = [];
+  let withMemoryResults: ModelResult[] = [];
   
   // Run without memory first (if comparing)
   if (compareMemory) {
     console.log('\n' + '█'.repeat(60));
-    console.log('   PHASE 1: WITHOUT UAM MEMORY');
+    console.log(`   PHASE 1: WITHOUT UAM MEMORY${isParallel ? ' (PARALLEL)' : ''}`);
     console.log('█'.repeat(60));
     
-    for (const model of modelsToTest) {
-      const result = await runBenchmarkForModel(model, BENCHMARK_TASKS, {
-        useMemory: false,
-        useHierarchicalPrompting: false,
-        maxTurns: 1,
-        apiKey,
-        verbose,
-      });
-      withoutMemoryResults.push(result);
+    const baseConfig = {
+      useMemory: false,
+      useHierarchicalPrompting: false,
+      maxTurns: 1,
+      apiKey,
+      verbose,
+    };
+    
+    if (isParallel) {
+      console.log(`\n  Running ${modelsToTest.length} models with concurrency=${effectiveParallel}...\n`);
+      withoutMemoryResults = await runModelsInParallel(
+        modelsToTest, BENCHMARK_TASKS, baseConfig, effectiveParallel
+      );
+    } else {
+      for (const model of modelsToTest) {
+        const result = await runBenchmarkForModel(model, BENCHMARK_TASKS, baseConfig);
+        withoutMemoryResults.push(result);
+      }
     }
   }
   
   // Run with memory (and all improvements)
   console.log('\n' + '█'.repeat(60));
-  console.log('   PHASE 2: WITH UAM IMPROVEMENTS');
+  console.log(`   PHASE 2: WITH UAM IMPROVEMENTS${isParallel ? ' (PARALLEL)' : ''}`);
   console.log('█'.repeat(60));
   
-  for (const model of modelsToTest) {
-    const result = await runBenchmarkForModel(model, BENCHMARK_TASKS, {
-      useMemory: true,
-      useHierarchicalPrompting,
-      maxTurns,
-      apiKey,
-      verbose,
-    });
-    withMemoryResults.push(result);
+  const uamConfig = {
+    useMemory: true,
+    useHierarchicalPrompting,
+    maxTurns,
+    apiKey,
+    verbose,
+  };
+  
+  if (isParallel) {
+    console.log(`\n  Running ${modelsToTest.length} models with concurrency=${effectiveParallel}...\n`);
+    withMemoryResults = await runModelsInParallel(
+      modelsToTest, BENCHMARK_TASKS, uamConfig, effectiveParallel
+    );
+  } else {
+    for (const model of modelsToTest) {
+      const result = await runBenchmarkForModel(model, BENCHMARK_TASKS, uamConfig);
+      withMemoryResults.push(result);
+    }
   }
   
   // Calculate improvement
