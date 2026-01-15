@@ -106,6 +106,35 @@ async function showStatus(cwd: string): Promise<void> {
     console.log(chalk.dim('  Run `uam memory start` to initialize'));
   }
 
+  // Check Ollama for embeddings
+  console.log('');
+  try {
+    const ollamaResponse = await fetch('http://localhost:11434/api/tags', {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000),
+    });
+    
+    if (ollamaResponse.ok) {
+      const ollamaData = await ollamaResponse.json() as { models: Array<{ name: string }> };
+      const embedModels = ollamaData.models?.filter(m => 
+        m.name.includes('embed') || m.name.includes('nomic')
+      ) || [];
+      
+      if (embedModels.length > 0) {
+        console.log(chalk.green('✓ Embeddings (Ollama): Active'));
+        console.log(chalk.dim(`  Models: ${embedModels.map(m => m.name).join(', ')}`));
+      } else {
+        console.log(chalk.yellow('○ Embeddings (Ollama): Running but no embed models'));
+        console.log(chalk.dim('  Run `ollama pull nomic-embed-text` to enable'));
+      }
+    } else {
+      console.log(chalk.yellow('○ Embeddings (Ollama): Not responding'));
+    }
+  } catch {
+    console.log(chalk.yellow('○ Embeddings (Ollama): Not running'));
+    console.log(chalk.dim('  Install from https://ollama.ai and run `ollama pull nomic-embed-text`'));
+  }
+
   // Check docker-compose
   const composePath = join(cwd, 'agents/docker-compose.yml');
   if (!existsSync(composePath)) {
