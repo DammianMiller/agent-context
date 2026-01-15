@@ -1,0 +1,328 @@
+/**
+ * Speculative Cache for UAM Memory System
+ * 
+ * Pre-computes likely next queries based on task patterns.
+ * Reduces latency by predicting and caching memory retrievals.
+ */
+
+export interface CacheEntry {
+  query: string;
+  result: unknown[];
+  embedding?: number[];
+  usageCount: number;
+  lastUsed: Date;
+  createdAt: Date;
+  predictedBy?: string;
+}
+
+export interface CacheConfig {
+  maxEntries: number;
+  ttlMs: number;
+  preWarmEnabled: boolean;
+  predictionDepth: number;
+}
+
+const DEFAULT_CONFIG: CacheConfig = {
+  maxEntries: 100,
+  ttlMs: 300000, // 5 minutes
+  preWarmEnabled: true,
+  predictionDepth: 3,
+};
+
+/**
+ * Query patterns for speculative prefetching
+ */
+const QUERY_PATTERNS: Record<string, string[]> = {
+  'sysadmin': [
+    'linux commands', 'systemd services', 'network configuration',
+    'docker containers', 'kernel modules', 'filesystem mounts',
+  ],
+  'security': [
+    'authentication patterns', 'secret management', 'vulnerability fixes',
+    'input validation', 'encryption methods', 'access control',
+  ],
+  'coding': [
+    'design patterns', 'error handling', 'async patterns',
+    'type definitions', 'refactoring', 'code review',
+  ],
+  'testing': [
+    'test patterns', 'mocking', 'assertions',
+    'coverage', 'integration tests', 'edge cases',
+  ],
+  'debugging': [
+    'error messages', 'stack traces', 'dependency conflicts',
+    'environment issues', 'git problems', 'build failures',
+  ],
+  'ml-training': [
+    'model training', 'dataset processing', 'hyperparameters',
+    'embeddings', 'evaluation metrics', 'GPU optimization',
+  ],
+};
+
+/**
+ * Speculative Memory Cache
+ */
+export class SpeculativeCache {
+  private config: CacheConfig;
+  private cache: Map<string, CacheEntry> = new Map();
+  private queryHistory: string[] = [];
+  private taskPatterns: Map<string, number> = new Map();
+
+  constructor(config: Partial<CacheConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  /**
+   * Get from cache with automatic staleness check
+   */
+  get(query: string): CacheEntry | null {
+    const normalizedQuery = this.normalizeQuery(query);
+    const entry = this.cache.get(normalizedQuery);
+
+    if (!entry) return null;
+
+    // Check TTL
+    const age = Date.now() - entry.lastUsed.getTime();
+    if (age > this.config.ttlMs) {
+      this.cache.delete(normalizedQuery);
+      return null;
+    }
+
+    // Update usage stats
+    entry.usageCount++;
+    entry.lastUsed = new Date();
+
+    return entry;
+  }
+
+  /**
+   * Set cache entry
+   */
+  set(query: string, result: unknown[], predictedBy?: string): void {
+    const normalizedQuery = this.normalizeQuery(query);
+    
+    // Evict if at capacity
+    if (this.cache.size >= this.config.maxEntries) {
+      this.evictLRU();
+    }
+
+    this.cache.set(normalizedQuery, {
+      query: normalizedQuery,
+      result,
+      usageCount: 1,
+      lastUsed: new Date(),
+      createdAt: new Date(),
+      predictedBy,
+    });
+
+    // Track query pattern
+    this.recordQuery(query);
+  }
+
+  /**
+   * Record query for pattern analysis
+   */
+  private recordQuery(query: string): void {
+    this.queryHistory.push(query);
+    
+    // Keep last 100 queries
+    if (this.queryHistory.length > 100) {
+      this.queryHistory.shift();
+    }
+
+    // Update task patterns
+    const category = this.detectCategory(query);
+    if (category) {
+      const count = this.taskPatterns.get(category) || 0;
+      this.taskPatterns.set(category, count + 1);
+    }
+  }
+
+  /**
+   * Detect task category from query
+   */
+  private detectCategory(query: string): string | null {
+    const queryLower = query.toLowerCase();
+    
+    for (const [category, keywords] of Object.entries(QUERY_PATTERNS)) {
+      for (const keyword of keywords) {
+        if (queryLower.includes(keyword.toLowerCase())) {
+          return category;
+        }
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get predicted queries based on current context
+   */
+  getPredictedQueries(currentQuery: string): string[] {
+    const predictions: string[] = [];
+    const category = this.detectCategory(currentQuery);
+
+    // Add category-specific predictions
+    if (category && QUERY_PATTERNS[category]) {
+      const categoryQueries = QUERY_PATTERNS[category];
+      predictions.push(...categoryQueries.slice(0, this.config.predictionDepth));
+    }
+
+    // Add patterns from history
+    const recentPatterns = this.analyzeQuerySequences();
+    predictions.push(...recentPatterns);
+
+    // Deduplicate and limit
+    return [...new Set(predictions)].slice(0, this.config.predictionDepth * 2);
+  }
+
+  /**
+   * Analyze query sequences for patterns
+   */
+  private analyzeQuerySequences(): string[] {
+    const patterns: string[] = [];
+    
+    if (this.queryHistory.length < 2) return patterns;
+
+    // Look for common follow-up queries
+    const transitions: Map<string, Map<string, number>> = new Map();
+    
+    for (let i = 0; i < this.queryHistory.length - 1; i++) {
+      const from = this.normalizeQuery(this.queryHistory[i]);
+      const to = this.normalizeQuery(this.queryHistory[i + 1]);
+      
+      if (!transitions.has(from)) {
+        transitions.set(from, new Map());
+      }
+      const toCount = transitions.get(from)!.get(to) || 0;
+      transitions.get(from)!.set(to, toCount + 1);
+    }
+
+    // Find most common transitions
+    if (this.queryHistory.length > 0) {
+      const lastQuery = this.normalizeQuery(this.queryHistory[this.queryHistory.length - 1]);
+      const nextQueries = transitions.get(lastQuery);
+      
+      if (nextQueries) {
+        const sorted = [...nextQueries.entries()].sort((a, b) => b[1] - a[1]);
+        patterns.push(...sorted.slice(0, 3).map(([query]) => query));
+      }
+    }
+
+    return patterns;
+  }
+
+  /**
+   * Pre-warm cache with predicted queries
+   */
+  async preWarm(
+    currentQuery: string,
+    fetcher: (query: string) => Promise<unknown[]>
+  ): Promise<void> {
+    if (!this.config.preWarmEnabled) return;
+
+    const predictions = this.getPredictedQueries(currentQuery);
+    
+    // Fetch in parallel
+    await Promise.all(
+      predictions.map(async (query) => {
+        if (!this.cache.has(this.normalizeQuery(query))) {
+          try {
+            const result = await fetcher(query);
+            this.set(query, result, currentQuery);
+          } catch {
+            // Ignore prefetch failures
+          }
+        }
+      })
+    );
+  }
+
+  /**
+   * Evict least recently used entry
+   */
+  private evictLRU(): void {
+    let oldest: { key: string; time: number } | null = null;
+    
+    for (const [key, entry] of this.cache) {
+      const time = entry.lastUsed.getTime();
+      if (!oldest || time < oldest.time) {
+        oldest = { key, time };
+      }
+    }
+    
+    if (oldest) {
+      this.cache.delete(oldest.key);
+    }
+  }
+
+  /**
+   * Normalize query for cache key
+   */
+  private normalizeQuery(query: string): string {
+    return query.toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getStats(): {
+    size: number;
+    hitRate: number;
+    avgUsage: number;
+    topPatterns: Array<{ category: string; count: number }>;
+  } {
+    const entries = [...this.cache.values()];
+    const totalUsage = entries.reduce((sum, e) => sum + e.usageCount, 0);
+    const hits = entries.filter(e => e.usageCount > 1).length;
+
+    const topPatterns = [...this.taskPatterns.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([category, count]) => ({ category, count }));
+
+    return {
+      size: this.cache.size,
+      hitRate: entries.length > 0 ? hits / entries.length : 0,
+      avgUsage: entries.length > 0 ? totalUsage / entries.length : 0,
+      topPatterns,
+    };
+  }
+
+  /**
+   * Clear expired entries
+   */
+  cleanup(): number {
+    const now = Date.now();
+    let removed = 0;
+
+    for (const [key, entry] of this.cache) {
+      const age = now - entry.lastUsed.getTime();
+      if (age > this.config.ttlMs) {
+        this.cache.delete(key);
+        removed++;
+      }
+    }
+
+    return removed;
+  }
+
+  /**
+   * Clear all cache
+   */
+  clear(): void {
+    this.cache.clear();
+    this.queryHistory = [];
+    this.taskPatterns.clear();
+  }
+}
+
+// Singleton instance
+let globalCache: SpeculativeCache | null = null;
+
+export function getSpeculativeCache(config?: Partial<CacheConfig>): SpeculativeCache {
+  if (!globalCache) {
+    globalCache = new SpeculativeCache(config);
+  }
+  return globalCache;
+}

@@ -124,15 +124,21 @@ print(json.dumps(embeddings.tolist()))
 }
 
 /**
- * TF-IDF Fallback Provider
- * Simple keyword-based embeddings when no ML model is available
+ * Enhanced TF-IDF Fallback Provider with Word Vectors
+ * Improved keyword-based embeddings with semantic awareness
  */
 export class TFIDFEmbeddingProvider implements EmbeddingProvider {
-  name = 'tfidf';
+  name = 'tfidf-enhanced';
   dimensions = 384;
   private vocabulary: Map<string, number> = new Map();
   private idfScores: Map<string, number> = new Map();
   private documents: string[] = [];
+  private wordVectors: Map<string, number[]> = new Map();
+
+  constructor() {
+    // Initialize semantic word clusters for better similarity
+    this.initializeSemanticClusters();
+  }
 
   async isAvailable(): Promise<boolean> {
     return true; // Always available as fallback
@@ -142,11 +148,29 @@ export class TFIDFEmbeddingProvider implements EmbeddingProvider {
     const tokens = this.tokenize(text);
     const vector = new Array(this.dimensions).fill(0);
     
+    // Combine TF-IDF with semantic clustering
     for (const token of tokens) {
       const idx = this.getTokenIndex(token);
       const tf = tokens.filter(t => t === token).length / tokens.length;
-      const idf = this.idfScores.get(token) || Math.log(this.documents.length + 1);
+      const idf = this.idfScores.get(token) || Math.log(this.documents.length + 2);
+      
+      // Base TF-IDF contribution
       vector[idx % this.dimensions] += tf * idf;
+      
+      // Add semantic cluster contribution
+      const wordVec = this.wordVectors.get(token);
+      if (wordVec) {
+        for (let i = 0; i < wordVec.length; i++) {
+          vector[i] += wordVec[i] * tf * 0.3; // Weighted semantic contribution
+        }
+      }
+    }
+
+    // Add n-gram features for better phrase matching
+    const bigrams = this.getBigrams(tokens);
+    for (const bigram of bigrams) {
+      const idx = this.hashString(bigram) % this.dimensions;
+      vector[idx] += 0.5;
     }
 
     return this.normalize(vector);
@@ -164,10 +188,49 @@ export class TFIDFEmbeddingProvider implements EmbeddingProvider {
   }
 
   private tokenize(text: string): string[] {
+    // Enhanced tokenization that handles code better
     return text.toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
+      .replace(/_/g, ' ') // Split snake_case
+      .replace(/[^\w\s-]/g, ' ')
       .split(/\s+/)
-      .filter(t => t.length > 2);
+      .filter(t => t.length > 1 && !this.isStopWord(t));
+  }
+
+  private isStopWord(token: string): boolean {
+    const stopWords = new Set([
+      'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+      'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+      'would', 'could', 'should', 'may', 'might', 'must', 'shall',
+      'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in',
+      'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
+      'through', 'during', 'before', 'after', 'above', 'below',
+      'between', 'under', 'again', 'further', 'then', 'once',
+      'here', 'there', 'when', 'where', 'why', 'how', 'all',
+      'each', 'few', 'more', 'most', 'other', 'some', 'such',
+      'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
+      'too', 'very', 'just', 'and', 'but', 'if', 'or', 'because',
+      'until', 'while', 'this', 'that', 'these', 'those', 'it',
+    ]);
+    return stopWords.has(token);
+  }
+
+  private getBigrams(tokens: string[]): string[] {
+    const bigrams: string[] = [];
+    for (let i = 0; i < tokens.length - 1; i++) {
+      bigrams.push(`${tokens[i]}_${tokens[i + 1]}`);
+    }
+    return bigrams;
+  }
+
+  private hashString(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash);
   }
 
   private getTokenIndex(token: string): number {
@@ -191,7 +254,7 @@ export class TFIDFEmbeddingProvider implements EmbeddingProvider {
     }
 
     for (const [token, docs] of tokenDocs) {
-      this.idfScores.set(token, Math.log(this.documents.length / (docs.size + 1)));
+      this.idfScores.set(token, Math.log((this.documents.length + 1) / (docs.size + 1)) + 1);
     }
   }
 
@@ -199,6 +262,51 @@ export class TFIDFEmbeddingProvider implements EmbeddingProvider {
     const magnitude = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
     if (magnitude === 0) return vector;
     return vector.map(v => v / magnitude);
+  }
+
+  /**
+   * Initialize semantic word clusters for domain-specific terms
+   * Words in the same cluster get similar vector contributions
+   */
+  private initializeSemanticClusters(): void {
+    const clusters: Record<string, string[]> = {
+      // Programming concepts
+      programming: ['code', 'function', 'class', 'method', 'variable', 'const', 'let', 'var', 'import', 'export', 'async', 'await', 'promise', 'callback'],
+      types: ['type', 'interface', 'enum', 'string', 'number', 'boolean', 'array', 'object', 'null', 'undefined'],
+      errors: ['error', 'exception', 'throw', 'catch', 'try', 'finally', 'bug', 'fix', 'debug', 'trace', 'stack'],
+      testing: ['test', 'spec', 'describe', 'it', 'expect', 'assert', 'mock', 'stub', 'spy', 'coverage'],
+      git: ['git', 'commit', 'push', 'pull', 'merge', 'branch', 'checkout', 'rebase', 'stash', 'diff'],
+      memory: ['memory', 'cache', 'store', 'retrieve', 'query', 'embed', 'vector', 'semantic', 'context'],
+      security: ['security', 'auth', 'token', 'secret', 'password', 'encrypt', 'decrypt', 'hash', 'salt'],
+      performance: ['performance', 'optimize', 'fast', 'slow', 'latency', 'throughput', 'cache', 'batch'],
+      database: ['database', 'sql', 'query', 'table', 'index', 'schema', 'migration', 'insert', 'update', 'delete'],
+      network: ['network', 'http', 'api', 'request', 'response', 'endpoint', 'url', 'fetch', 'axios'],
+    };
+
+    // Generate pseudo-random but consistent vectors for each cluster
+    for (const [clusterName, words] of Object.entries(clusters)) {
+      const clusterVector = this.generateClusterVector(clusterName);
+      for (const word of words) {
+        // Add slight variation for each word
+        const wordVector = clusterVector.map((v, i) => 
+          v + (this.hashString(word + i.toString()) % 100 - 50) / 500
+        );
+        this.wordVectors.set(word, wordVector);
+      }
+    }
+  }
+
+  private generateClusterVector(seed: string): number[] {
+    const vector = new Array(this.dimensions).fill(0);
+    const hash = this.hashString(seed);
+    
+    // Create sparse activation pattern for this cluster
+    for (let i = 0; i < 20; i++) {
+      const idx = (hash + i * 17) % this.dimensions;
+      vector[idx] = ((hash + i) % 100) / 100;
+    }
+    
+    return vector;
   }
 }
 
