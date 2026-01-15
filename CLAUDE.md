@@ -423,28 +423,28 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 universal-agent-memory/
 ├── src/                           # Source code
 │   ├── analyzers/                 
+│   ├── benchmarks/                
 │   ├── bin/                       
 │   ├── cli/                       
 │   ├── coordination/              
 │   ├── generators/                
-│   ├── memory/                    
-│   ├── tasks/                     
-│   └── types/                     
+│   ├── harbor/                    
+│   └── memory/                    
 │
 ├── tools/                         # Development tools
 │   └── agents/                    
 │
 ├── scripts/                       # Automation scripts
 │
+├── test/                          # Test suites
+│   └── benchmarks/                
+│
 ├── docs/                          # Documentation
 │   └── research/                  
 │
 ├── .factory/                      # Factory AI configuration
-│   ├── commands/                  # CLI commands
 │   ├── droids/                    # Custom AI agents
-│   ├── scripts/                   # Automation scripts
-│   ├── skills/                    # Reusable skills
-│   └── templates/                 
+│   └── skills/                    # Reusable skills
 │
 ├── .github/                       # GitHub configuration
 │   └── workflows/                 # CI/CD pipelines
@@ -523,10 +523,22 @@ npm run build
 | **Semantic Memory** (Qdrant: `claude_memory` collection)
 
   ... | See memory for details |
+| **Our Tasks:**
+- Simple code generation (calculate average, ... | See memory for details |
+| **File:** `src/memory/backends/qdrant-cloud.ts`
+
+[code block... | See memory for details |
+| **Current flow:**
+1. Load generic CLAUDE.md sections
+2. Quer... | See memory for details |
+| | Priority | Issue | Impact | Effort |
+|----------|-------|-... | See memory for details |
+| fix(qdrant): add project-scoped collections for data isolation|Each project now gets its own Qdrant collection using a hash-based naming | scheme: {base}_{projectName}_{hash} Affected files: src/cli/ |
+| fix: use pattern matching for task-001 instead of execution|Task 1 now correctly passes - the issue was that requiresExecution:true | tried to compile and run the model's output which lacks a te |
+| fix: resolve TypeScript errors for npm publish pipeline|- Add | js extensions to relative imports (ESM node16 compatibility) |
 | fix: update command uses correct template, consolidate CLI options|Fixes: | - Fixed Zod schema defaulting webDatabase which forced web t |
 | fix: read version from package | json instead of hardcoding|- CLI now dynamically reads versi |
 | fix: improve install scripts with GitHub fallback and add npm publish workflow|- Install scripts now fall back to cloning from GitHub if npm package unavailable | - Install to ~/.universal-agent-memory for persistent instal |
-| fix: update URLs to use raw GitHub URLs and fix npm publishing|- Replace non-existent universal-agent-memory | dev URLs with raw GitHub URLs. - Add publishConfig for npm p |
 
 ---
 
@@ -540,6 +552,7 @@ npm run build
 | `tsconfig.json` | TypeScript configuration |
 | `.gitignore` | Git ignore patterns |
 | `.prettierrc` | Prettier configuration |
+| `vitest.config.ts` | Vitest test configuration |
 
 ---
 
@@ -696,7 +709,7 @@ The AI follow...
 No gotchas recorded yet.
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (25 changes), package-lock.json (17 changes), templates/CLAUDE.template.md (17 changes), src/generators/claude-md.ts (10 changes), README.md (8 changes), CLAUDE.md (7 changes), src/cli/init.ts (7 changes), src/cli/memory.ts (6 changes), src/bin/cli.ts (6 changes), scripts/install-desktop.sh (5 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (30 changes), package-lock.json (21 changes), .beads/issues.jsonl (21 changes), templates/CLAUDE.template.md (17 changes), src/generators/claude-md.ts (10 changes), CLAUDE.md (8 changes), README.md (8 changes), src/bin/cli.ts (7 changes), src/cli/init.ts (7 changes), src/cli/memory.ts (6 changes). These files may need extra attention during changes.
 
 </coding_guidelines>
 
@@ -710,28 +723,28 @@ Frequently modified files (hot spots): package.json (25 changes), package-lock.j
 universal-agent-memory/
 ├── src/                           # Source code
 │   ├── analyzers/                 
+│   ├── benchmarks/                
 │   ├── bin/                       
 │   ├── cli/                       
 │   ├── coordination/              
 │   ├── generators/                
-│   ├── memory/                    
-│   ├── tasks/                     
-│   └── types/                     
+│   ├── harbor/                    
+│   └── memory/                    
 │
 ├── tools/                         # Development tools
 │   └── agents/                    
 │
 ├── scripts/                       # Automation scripts
 │
+├── test/                          # Test suites
+│   └── benchmarks/                
+│
 ├── docs/                          # Documentation
 │   └── research/                  
 │
 ├── .factory/                      # Factory AI configuration
-│   ├── commands/                  # CLI commands
 │   ├── droids/                    # Custom AI agents
-│   ├── scripts/                   # Automation scripts
-│   ├── skills/                    # Reusable skills
-│   └── templates/                 
+│   └── skills/                    # Reusable skills
 │
 ├── .github/                       # GitHub configuration
 │   └── workflows/                 # CI/CD pipelines
@@ -740,6 +753,49 @@ universal-agent-memory/
 ---
 
 <!-- Custom Sections (preserved from existing file) -->
+
+## � � CODE FIELD - COGNITIVE ENVIRONMENT
+
+**Apply to ALL code generation. Creates conditions where better code emerges naturally.**
+
+### Core Inhibitions
+
+```
+Do not write code before stating assumptions.
+Do not claim correctness you haven't verified.
+Do not handle only the happy path.
+Under what conditions does this work?
+```
+
+### Before Writing Code
+
+- What are you assuming about the input?
+- What are you assuming about the environment?
+- What would break this?
+- What would a malicious caller do?
+
+### Do Not
+
+- Write code before stating assumptions
+- Claim correctness you haven't verified
+- Handle the happy path and gesture at the rest
+- Import complexity you don't need
+- Solve problems you weren't asked to solve
+- Produce code you wouldn't want to debug at 3am
+
+### Expected Output Format
+
+**Before code**: Assumptions stated explicitly, scope bounded
+**In code**: Smaller than expected, edge cases handled or explicitly rejected
+**After code**: "What this handles" and "What this does NOT handle" sections
+
+*Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
+
+---
+
+---
+
+---
 
 ## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
 
@@ -778,6 +834,8 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
+---
+
 ## � �️ SKILLFORGE MODE (OPTIONAL)
 
 **Use when**: The request is to create, improve, or compose skills (not regular feature work).
@@ -790,6 +848,235 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
 
 **Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
+
+---
+
+---
+
+---
+
+## � � TOKEN EFFICIENCY RULES
+
+- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
+- Summarize command output; quote only the lines needed for decisions.
+- Use parallel tool calls to reduce back-and-forth.
+- Ask for clarification only when necessary to proceed correctly.
+
+---
+
+---
+
+---
+
+## � � Testing Requirements
+
+1. Create worktree
+2. Update/create tests
+3. Run `npm test`
+4. Run linting
+5. Create PR
+
+---
+
+---
+
+---
+
+## � � CODE FIELD - COGNITIVE ENVIRONMENT
+
+**Apply to ALL code generation. Creates conditions where better code emerges naturally.**
+
+### Core Inhibitions
+
+```
+Do not write code before stating assumptions.
+Do not claim correctness you haven't verified.
+Do not handle only the happy path.
+Under what conditions does this work?
+```
+
+### Before Writing Code
+
+- What are you assuming about the input?
+- What are you assuming about the environment?
+- What would break this?
+- What would a malicious caller do?
+
+### Do Not
+
+- Write code before stating assumptions
+- Claim correctness you haven't verified
+- Handle the happy path and gesture at the rest
+- Import complexity you don't need
+- Solve problems you weren't asked to solve
+- Produce code you wouldn't want to debug at 3am
+
+### Expected Output Format
+
+**Before code**: Assumptions stated explicitly, scope bounded
+**In code**: Smaller than expected, edge cases handled or explicitly rejected
+**After code**: "What this handles" and "What this does NOT handle" sections
+
+*Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
+
+---
+
+---
+
+---
+
+---
+
+## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
+
+**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
+
+**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
+
+**Process**:
+1. **Decompose** the request into discrete work items with clear inputs/outputs.
+2. **Map dependencies** (A blocks B). Only run B after A is complete.
+3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
+4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
+5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
+
+**When to expand the agent pool**:
+- Multiple files/modules with low coupling
+- Parallel research or analysis tasks
+- Independent test or verification tasks
+
+**Example**:
+```bash
+# Parallel research tasks (dependency-free)
+Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
+Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
+
+# Dependent work (sequential)
+# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
+```
+
+**Conflict avoidance**:
+- One agent per file at a time
+- Declare file ownership in prompts
+- If overlap risk is high, wait or split by section
+
+---
+
+---
+
+---
+
+---
+
+## � �️ SKILLFORGE MODE (OPTIONAL)
+
+**Use when**: The request is to create, improve, or compose skills (not regular feature work).
+
+**Phases**:
+0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
+1. **Deep Analysis** (multi‑lens, edge cases, constraints)
+2. **Specification** (structured skill spec)
+3. **Generation** (implement skill)
+4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
+
+**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
+
+---
+
+---
+
+---
+
+---
+
+## � � TOKEN EFFICIENCY RULES
+
+- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
+- Summarize command output; quote only the lines needed for decisions.
+- Use parallel tool calls to reduce back-and-forth.
+- Ask for clarification only when necessary to proceed correctly.
+
+---
+
+---
+
+---
+
+---
+
+## � � Testing Requirements
+
+1. Create worktree
+2. Update/create tests
+3. Run `npm test`
+4. Run linting
+5. Create PR
+
+---
+
+---
+
+---
+
+---
+
+## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
+
+**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
+
+**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
+
+**Process**:
+1. **Decompose** the request into discrete work items with clear inputs/outputs.
+2. **Map dependencies** (A blocks B). Only run B after A is complete.
+3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
+4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
+5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
+
+**When to expand the agent pool**:
+- Multiple files/modules with low coupling
+- Parallel research or analysis tasks
+- Independent test or verification tasks
+
+**Example**:
+```bash
+# Parallel research tasks (dependency-free)
+Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
+Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
+
+# Dependent work (sequential)
+# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
+```
+
+**Conflict avoidance**:
+- One agent per file at a time
+- Declare file ownership in prompts
+- If overlap risk is high, wait or split by section
+
+---
+
+---
+
+---
+
+---
+
+## � �️ SKILLFORGE MODE (OPTIONAL)
+
+**Use when**: The request is to create, improve, or compose skills (not regular feature work).
+
+**Phases**:
+0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
+1. **Deep Analysis** (multi‑lens, edge cases, constraints)
+2. **Specification** (structured skill spec)
+3. **Generation** (implement skill)
+4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
+
+**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
+
+---
+
+---
 
 ---
 

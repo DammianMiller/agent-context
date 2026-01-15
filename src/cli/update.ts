@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'node:crypto';
 
 import { analyzeProject } from '../analyzers/index.js';
 import { generateClaudeMd } from '../generators/claude-md.js';
@@ -228,8 +229,7 @@ async function updateMemorySystem(
  * Generate a safe collection name from project ID (matches qdrant-cloud.ts)
  */
 function getProjectCollectionName(base: string, projectPath: string): string {
-  const crypto = require('crypto');
-  const hash = crypto.createHash('sha256').update(projectPath).digest('hex').slice(0, 8);
+  const hash = createHash('sha256').update(projectPath).digest('hex').slice(0, 8);
   const projectName = projectPath
     .split(/[/\\]/).pop() || projectPath
     .replace(/[^a-zA-Z0-9_-]/g, '_')
