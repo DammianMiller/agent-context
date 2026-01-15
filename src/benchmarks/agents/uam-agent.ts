@@ -19,7 +19,7 @@
  * - Multi-agent coordination (future enhancement)
  */
 
-import { BenchmarkTask, AgentExecution } from '../benchmark';
+import { BenchmarkTask, AgentExecution } from '../benchmark.js';
 
 // ============================================================================
 // UAM Memory Simulation
@@ -275,12 +275,14 @@ export class UAMAgent {
     const lessons = this.memory.getLessons();
     
     // Filter by category and difficulty
-    return lessons.filter(lesson => {
+    return lessons.filter((lesson) => {
       const content = lesson.content.toLowerCase();
       const taskKeywords = task.instruction.toLowerCase();
-      
-      return content.includes(task.category) || 
-             taskKeywords.split(' ').some(k => content.includes(k));
+
+      return (
+        content.includes(task.category) ||
+        taskKeywords.split(' ').some((keyword) => content.includes(keyword))
+      );
     });
   }
   
@@ -292,10 +294,10 @@ export class UAMAgent {
     const errors = this.memory.query(['gotcha', 'mistake', 'error', 'failed']);
     
     // Filter for relevant mistakes
-    return errors.filter(error => {
+    return errors.filter((error) => {
       const taskKeywords = task.instruction.toLowerCase();
       const content = error.content.toLowerCase();
-      return taskKeywords.split(' ').some(k => content.includes(k));
+      return taskKeywords.split(' ').some((keyword) => content.includes(keyword));
     });
   }
   
@@ -326,7 +328,7 @@ export class UAMAgent {
     const attemptBonus = (attempt - 1) * 0.05; // 5% per retry (less than naive)
     
     const successRate = Math.min(
-      baseSuccessRate[task.difficulty] + 
+      baseSuccessRate[task.difficulty as keyof typeof baseSuccessRate] + 
       contextBonus + 
       lessonBonus + 
       mistakeAvoidance + 
@@ -368,7 +370,7 @@ export class UAMAgent {
     };
     
     // Add random variation
-    const time = baseTime[task.difficulty] + (Math.random() * 1000);
+    const time = baseTime[task.difficulty as keyof typeof baseTime] + (Math.random() * 1000);
     await new Promise(resolve => setTimeout(resolve, time));
   }
   
@@ -389,7 +391,7 @@ export class UAMAgent {
   /**
    * Simulate failed execution
    */
-  private async simulateFailure(task: BenchmarkTask): Promise<void> {
+  private async simulateFailure(_task: BenchmarkTask): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   

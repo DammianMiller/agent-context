@@ -18,7 +18,7 @@
  * - Memory of project structure
  */
 
-import { BenchmarkTask, AgentExecution } from '../benchmark';
+import { BenchmarkTask, AgentExecution } from '../benchmark.js';
 
 export class NaiveAgent {
   private executionCount = 0;
@@ -82,7 +82,7 @@ export class NaiveAgent {
     
     // Adjust for attempts (learning through trial and error only)
     const attemptBonus = (attempt - 1) * 0.1; // 10% bonus per retry
-    const successRate = baseSuccessRate[task.difficulty] + attemptBonus;
+    const successRate = baseSuccessRate[task.difficulty as keyof typeof baseSuccessRate] + attemptBonus;
     
     // Roll for success
     const succeeded = Math.random() < successRate;
@@ -110,7 +110,7 @@ export class NaiveAgent {
     };
     
     // Add random variation
-    const time = baseTime[task.difficulty] + (Math.random() * 2000);
+    const time = baseTime[task.difficulty as keyof typeof baseTime] + (Math.random() * 2000);
     await new Promise(resolve => setTimeout(resolve, time));
   }
   
@@ -133,7 +133,7 @@ export class NaiveAgent {
   /**
    * Simulate failed execution
    */
-  private async simulateFailure(task: BenchmarkTask): Promise<void> {
+  private async simulateFailure(_task: BenchmarkTask): Promise<void> {
     // Simulate making a mistake
     await new Promise(resolve => setTimeout(resolve, 500));
   }
