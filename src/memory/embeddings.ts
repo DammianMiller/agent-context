@@ -2,7 +2,13 @@
  * Embedding Service for UAM Memory System
  * 
  * Provides text embedding generation for semantic memory retrieval.
- * Supports multiple backends: OpenAI, local transformers, or simple TF-IDF fallback.
+ * Supports multiple backends: Ollama (local), OpenAI, local transformers, or simple TF-IDF fallback.
+ * 
+ * Priority order:
+ * 1. Ollama (if running with nomic-embed-text or similar)
+ * 2. OpenAI (if API key available)
+ * 3. Local sentence-transformers (if installed)
+ * 4. TF-IDF fallback (always available)
  */
 
 import { execSync } from 'child_process';
@@ -13,6 +19,78 @@ export interface EmbeddingProvider {
   embed(text: string): Promise<number[]>;
   embedBatch(texts: string[]): Promise<number[][]>;
   isAvailable(): Promise<boolean>;
+}
+
+/**
+ * Ollama Embeddings Provider (LOCAL - NO API COSTS)
+ * Uses nomic-embed-text (768 dimensions) or other embedding models
+ */
+export class OllamaEmbeddingProvider implements EmbeddingProvider {
+  name = 'ollama';
+  dimensions = 768; // nomic-embed-text default
+  private endpoint: string;
+  private model: string;
+  private available: boolean | null = null;
+
+  constructor(endpoint: string = 'http://localhost:11434', model: string = 'nomic-embed-text') {
+    this.endpoint = endpoint;
+    this.model = model;
+  }
+
+  async isAvailable(): Promise<boolean> {
+    if (this.available !== null) return this.available;
+    
+    try {
+      const response = await fetch(`${this.endpoint}/api/tags`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(2000),
+      });
+      
+      if (!response.ok) {
+        this.available = false;
+        return false;
+      }
+      
+      const data = await response.json() as { models: Array<{ name: string }> };
+      const hasEmbedModel = data.models?.some(m => 
+        m.name.includes('embed') || 
+        m.name.includes('nomic') ||
+        m.name === this.model ||
+        m.name.startsWith(this.model)
+      );
+      
+      this.available = hasEmbedModel;
+      return hasEmbedModel;
+    } catch {
+      this.available = false;
+      return false;
+    }
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const response = await fetch(`${this.endpoint}/api/embeddings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.model,
+        prompt: text,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as { embedding: number[] };
+    this.dimensions = data.embedding.length; // Update dimensions from actual response
+    return data.embedding;
+  }
+
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    // Ollama doesn't have native batch, but we can parallelize
+    const results = await Promise.all(texts.map(t => this.embed(t)));
+    return results;
+  }
 }
 
 /**
@@ -313,6 +391,8 @@ export class TFIDFEmbeddingProvider implements EmbeddingProvider {
 /**
  * Embedding Service - Main interface for UAM memory system
  * Automatically selects best available provider
+ * 
+ * Priority: Ollama (local, free) > OpenAI > Local transformers > TF-IDF fallback
  */
 export class EmbeddingService {
   private provider: EmbeddingProvider | null = null;
@@ -320,8 +400,9 @@ export class EmbeddingService {
   private cache: Map<string, number[]> = new Map();
   private cacheMaxSize: number = 10000;
 
-  constructor() {
+  constructor(ollamaEndpoint?: string, ollamaModel?: string) {
     this.providers = [
+      new OllamaEmbeddingProvider(ollamaEndpoint, ollamaModel), // First priority - local, free
       new OpenAIEmbeddingProvider(),
       new LocalEmbeddingProvider(),
       new TFIDFEmbeddingProvider(),

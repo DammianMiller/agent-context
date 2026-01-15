@@ -5,6 +5,11 @@
  * - Trigger: Every 10 working memory entries
  * - Action: Summarize → session_memories, Extract lessons → semantic memory
  * - Dedup: Skip if content_hash exists OR similarity > 0.92
+ * 
+ * Enhanced with SimpleMem-style recursive consolidation:
+ * - Background async consolidation process
+ * - Hierarchical abstraction (memories → summaries → meta-summaries)
+ * - Quality scoring and automatic pruning
  */
 
 import { createHash } from 'crypto';
@@ -12,12 +17,16 @@ import { existsSync } from 'fs';
 import Database from 'better-sqlite3';
 import { summarizeMemories, compressMemoryEntry } from './context-compressor.js';
 import { getEmbeddingService } from './embeddings.js';
+import { createSemanticUnit } from './semantic-compression.js';
 
 export interface ConsolidationConfig {
   triggerThreshold: number;
   minImportanceForLongTerm: number;
   similarityThreshold: number;
   maxSummaryLength: number;
+  backgroundIntervalMs: number;      // Interval for background consolidation
+  recursiveDepth: number;            // Max levels of abstraction
+  qualityDecayRate: number;          // Rate at which unused memories decay
 }
 
 const DEFAULT_CONFIG: ConsolidationConfig = {
@@ -25,6 +34,9 @@ const DEFAULT_CONFIG: ConsolidationConfig = {
   minImportanceForLongTerm: 7,
   similarityThreshold: 0.92,
   maxSummaryLength: 500,
+  backgroundIntervalMs: 60000,  // 1 minute
+  recursiveDepth: 3,            // memories → summaries → meta-summaries
+  qualityDecayRate: 0.95,       // 5% decay per day unused
 };
 
 export interface ConsolidationResult {
@@ -43,6 +55,9 @@ export class MemoryConsolidator {
   private db: Database.Database | null = null;
   private contentHashes: Set<string> = new Set();
   private lastConsolidationId: number = 0;
+  private backgroundInterval: NodeJS.Timeout | null = null;
+  private isRunning: boolean = false;
+  private memoryQualityScores: Map<string, { score: number; lastAccessed: Date; accessCount: number }> = new Map();
 
   constructor(config: Partial<ConsolidationConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -406,9 +421,196 @@ export class MemoryConsolidator {
   }
 
   /**
+   * Start background consolidation process (SimpleMem-style async)
+   */
+  startBackgroundConsolidation(): void {
+    if (this.backgroundInterval) return;
+    
+    this.isRunning = true;
+    this.backgroundInterval = setInterval(async () => {
+      if (!this.isRunning) return;
+      
+      try {
+        // Run consolidation if threshold met
+        if (this.shouldConsolidate()) {
+          await this.consolidate();
+        }
+        
+        // Run recursive consolidation on summaries
+        await this.recursiveConsolidate();
+        
+        // Apply quality decay
+        await this.applyQualityDecay();
+        
+      } catch (error) {
+        console.error('[MemoryConsolidator] Background error:', error);
+      }
+    }, this.config.backgroundIntervalMs);
+    
+    console.log(`[MemoryConsolidator] Background consolidation started (interval: ${this.config.backgroundIntervalMs}ms)`);
+  }
+
+  /**
+   * Stop background consolidation
+   */
+  stopBackgroundConsolidation(): void {
+    this.isRunning = false;
+    if (this.backgroundInterval) {
+      clearInterval(this.backgroundInterval);
+      this.backgroundInterval = null;
+    }
+  }
+
+  /**
+   * Recursive consolidation - merge summaries into meta-summaries
+   * Based on SimpleMem's hierarchical abstraction
+   */
+  async recursiveConsolidate(depth: number = 0): Promise<number> {
+    if (!this.db || depth >= this.config.recursiveDepth) return 0;
+    
+    let consolidated = 0;
+    
+    try {
+      // Find summaries that can be merged (same type, adjacent time periods)
+      const stmt = this.db.prepare(`
+        SELECT id, timestamp, type, content, importance
+        FROM session_memories
+        WHERE type = 'summary'
+        ORDER BY timestamp ASC
+        LIMIT 20
+      `);
+      const summaries = stmt.all() as Array<{
+        id: number;
+        timestamp: string;
+        type: string;
+        content: string;
+        importance: number;
+      }>;
+      
+      // Group adjacent summaries (within 24 hours)
+      const groups: typeof summaries[] = [];
+      let currentGroup: typeof summaries = [];
+      
+      for (const summary of summaries) {
+        if (currentGroup.length === 0) {
+          currentGroup.push(summary);
+        } else {
+          const lastTime = new Date(currentGroup[currentGroup.length - 1].timestamp).getTime();
+          const thisTime = new Date(summary.timestamp).getTime();
+          const hoursDiff = (thisTime - lastTime) / (1000 * 60 * 60);
+          
+          if (hoursDiff <= 24) {
+            currentGroup.push(summary);
+          } else {
+            if (currentGroup.length >= 3) groups.push(currentGroup);
+            currentGroup = [summary];
+          }
+        }
+      }
+      if (currentGroup.length >= 3) groups.push(currentGroup);
+      
+      // Create meta-summaries from groups
+      for (const group of groups) {
+        const unit = createSemanticUnit(
+          group.map(s => ({ content: s.content, importance: s.importance }))
+        );
+        
+        if (unit.compressionRatio > 1.2) {
+          const metaSummary = unit.atomicFacts.map(f => f.content).join(' ');
+          const hash = this.hashContent(metaSummary);
+          
+          if (!this.contentHashes.has(hash)) {
+            await this.storeSessionMemory(metaSummary, 'meta-summary', 8);
+            this.contentHashes.add(hash);
+            consolidated++;
+            
+            // Remove original summaries
+            const ids = group.map(s => s.id);
+            this.db.prepare(`DELETE FROM session_memories WHERE id IN (${ids.join(',')})`).run();
+          }
+        }
+      }
+      
+    } catch {
+      // Ignore errors
+    }
+    
+    return consolidated;
+  }
+
+  /**
+   * Apply quality decay to unused memories (Memory-R1 style)
+   */
+  async applyQualityDecay(): Promise<number> {
+    if (!this.db) return 0;
+    
+    const now = Date.now();
+    let updated = 0;
+    
+    try {
+      const stmt = this.db.prepare(`
+        SELECT id, importance, timestamp
+        FROM session_memories
+        WHERE importance > 1
+      `);
+      const rows = stmt.all() as Array<{
+        id: number;
+        importance: number;
+        timestamp: string;
+      }>;
+      
+      const updateStmt = this.db.prepare(`
+        UPDATE session_memories SET importance = ? WHERE id = ?
+      `);
+      
+      for (const row of rows) {
+        const memKey = `session-${row.id}`;
+        const quality = this.memoryQualityScores.get(memKey);
+        
+        // Calculate days since last access (or creation)
+        const lastAccess = quality?.lastAccessed || new Date(row.timestamp);
+        const daysSince = (now - lastAccess.getTime()) / (1000 * 60 * 60 * 24);
+        
+        // Apply decay: importance * (decayRate ^ days)
+        const decayed = Math.round(row.importance * Math.pow(this.config.qualityDecayRate, daysSince));
+        
+        if (decayed !== row.importance && decayed >= 1) {
+          updateStmt.run(decayed, row.id);
+          updated++;
+        }
+      }
+      
+    } catch {
+      // Ignore errors
+    }
+    
+    return updated;
+  }
+
+  /**
+   * Record memory access (for quality scoring)
+   */
+  recordAccess(memoryId: string): void {
+    const existing = this.memoryQualityScores.get(memoryId);
+    this.memoryQualityScores.set(memoryId, {
+      score: (existing?.score || 5) + 0.5,
+      lastAccessed: new Date(),
+      accessCount: (existing?.accessCount || 0) + 1,
+    });
+  }
+
+  /**
+   * Get memory quality score
+   */
+  getQualityScore(memoryId: string): number {
+    return this.memoryQualityScores.get(memoryId)?.score || 5;
+  }
+
+  /**
    * Close database connection
    */
   close(): void {
+    this.stopBackgroundConsolidation();
     if (this.db) {
       this.db.close();
       this.db = null;

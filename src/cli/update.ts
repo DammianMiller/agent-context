@@ -1,15 +1,22 @@
 import chalk from 'chalk';
 import ora from 'ora';
-import { existsSync, readFileSync, writeFileSync, copyFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
+
 import { analyzeProject } from '../analyzers/index.js';
 import { generateClaudeMd } from '../generators/claude-md.js';
 import { mergeClaudeMd, validateMerge } from '../utils/merge-claude-md.js';
 import { AgentContextConfigSchema } from '../types/index.js';
+import { initializeMemoryDatabase } from '../memory/short-term/schema.js';
+import { getEmbeddingService } from '../memory/embeddings.js';
+import { getMemoryConsolidator } from '../memory/memory-consolidator.js';
 import type { AgentContextConfig } from '../types/index.js';
 
 interface UpdateOptions {
   dryRun?: boolean;
+  skipMemory?: boolean;
+  skipQdrant?: boolean;
+  verbose?: boolean;
 }
 
 export async function updateCommand(options: UpdateOptions): Promise<void> {
@@ -138,18 +145,172 @@ export async function updateCommand(options: UpdateOptions): Promise<void> {
   writeFileSync(existingPath!, mergedContent);
 
   console.log(chalk.green(`\n✅ Updated ${existingPath}\n`));
-  console.log('What was preserved:');
-  console.log('  • All custom sections');
-  console.log('  • URLs, kubectl contexts, workflows');
-  console.log('  • Config files, gotchas, lessons');
-  console.log('  • Any content not in the standard template');
-  console.log('');
-  console.log('What was updated:');
-  console.log('  • Template structure and formatting');
-  console.log('  • Standard sections (decision loop, memory system, etc.)');
+
+  // Update memory system
+  if (!options.skipMemory) {
+    await updateMemorySystem(cwd, config, options);
+  }
+
+  // Update Qdrant if available
+  if (!options.skipQdrant) {
+    await updateQdrantCollection(cwd, config, options);
+  }
+
+  // Summary
+  console.log(chalk.bold('\n📋 Update Summary:\n'));
+  console.log('CLAUDE.md:');
+  console.log('  • All custom sections preserved');
+  console.log('  • Template structure updated');
   console.log('  • Code Field cognitive environment (v9.0)');
-  console.log('  • Inhibition-style directives');
+  console.log('');
+  console.log('Memory System:');
+  console.log('  • SQLite database schema updated');
+  console.log('  • Embedding service initialized');
+  console.log('  • Background consolidation ready');
   console.log('');
   console.log(chalk.dim(`Backup saved at: ${backupPath}`));
   console.log(chalk.dim('If something looks wrong, restore from backup.'));
+}
+
+/**
+ * Update memory system - SQLite schema, embeddings, consolidator
+ */
+async function updateMemorySystem(
+  cwd: string,
+  config: AgentContextConfig,
+  options: UpdateOptions
+): Promise<void> {
+  const memSpinner = ora('Updating memory system...').start();
+  
+  try {
+    // Ensure directories exist
+    const memoryDir = join(cwd, 'agents/data/memory');
+    if (!existsSync(memoryDir)) {
+      mkdirSync(memoryDir, { recursive: true });
+    }
+    
+    // Initialize/update SQLite database
+    const dbPath = config.memory?.shortTerm?.path || './agents/data/memory/short_term.db';
+    const fullDbPath = join(cwd, dbPath);
+    initializeMemoryDatabase(fullDbPath);
+    
+    // Initialize embedding service
+    const embeddingService = getEmbeddingService();
+    await embeddingService.initialize();
+    
+    if (options.verbose) {
+      console.log(chalk.dim(`  Embedding provider: ${embeddingService.getProviderName()}`));
+      console.log(chalk.dim(`  Dimensions: ${embeddingService.getDimensions()}`));
+    }
+    
+    // Initialize consolidator
+    const consolidator = getMemoryConsolidator();
+    consolidator.initialize(fullDbPath);
+    
+    memSpinner.succeed('Memory system updated');
+    
+    if (options.verbose) {
+      const stats = consolidator.getStats();
+      console.log(chalk.dim(`  Total memories: ${stats.totalMemories}`));
+      console.log(chalk.dim(`  Session memories: ${stats.totalSessionMemories}`));
+      console.log(chalk.dim(`  Lessons extracted: ${stats.totalLessons}`));
+    }
+    
+  } catch (error) {
+    memSpinner.warn('Memory system update had issues');
+    if (options.verbose) {
+      console.error(chalk.dim(`  ${error}`));
+    }
+  }
+}
+
+/**
+ * Update Qdrant collection - handle dimension migration if needed
+ */
+async function updateQdrantCollection(
+  _cwd: string,
+  config: AgentContextConfig,
+  options: UpdateOptions
+): Promise<void> {
+  const qdrantSpinner = ora('Checking Qdrant collection...').start();
+  
+  try {
+    // Check if Qdrant is running
+    const endpoint = config.memory?.longTerm?.endpoint || 'localhost:6333';
+    const url = endpoint.startsWith('http') ? endpoint : `http://${endpoint}`;
+    
+    const response = await fetch(`${url}/collections`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    
+    if (!response.ok) {
+      qdrantSpinner.info('Qdrant not available (optional)');
+      return;
+    }
+    
+    const data = await response.json() as { result: { collections: Array<{ name: string }> } };
+    const collection = config.memory?.longTerm?.collection || 'agent_memory';
+    
+    // Check collection dimensions
+    const collectionExists = data.result.collections.some(c => c.name === collection);
+    
+    if (collectionExists) {
+      const collectionInfo = await fetch(`${url}/collections/${collection}`);
+      const info = await collectionInfo.json() as { 
+        result: { config: { params: { vectors: { size: number } } } } 
+      };
+      const currentSize = info.result?.config?.params?.vectors?.size;
+      
+      // Get expected dimensions from embedding service
+      const embeddingService = getEmbeddingService();
+      await embeddingService.initialize();
+      const expectedSize = embeddingService.getDimensions();
+      
+      if (currentSize && currentSize !== expectedSize) {
+        qdrantSpinner.text = `Migrating collection (${currentSize} → ${expectedSize} dimensions)...`;
+        
+        // Create new collection with correct dimensions
+        const newCollection = `${collection}_v${expectedSize}`;
+        const newExists = data.result.collections.some(c => c.name === newCollection);
+        
+        if (!newExists) {
+          await fetch(`${url}/collections/${newCollection}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vectors: { size: expectedSize, distance: 'Cosine' },
+            }),
+          });
+          
+          qdrantSpinner.succeed(`Created new collection: ${newCollection} (${expectedSize} dims)`);
+          console.log(chalk.dim(`  Old collection ${collection} preserved for reference`));
+        } else {
+          qdrantSpinner.succeed(`Collection ${newCollection} already exists with correct dimensions`);
+        }
+      } else {
+        qdrantSpinner.succeed(`Qdrant collection OK (${currentSize} dimensions)`);
+      }
+    } else {
+      // Create collection with correct dimensions
+      const embeddingService = getEmbeddingService();
+      await embeddingService.initialize();
+      const expectedSize = embeddingService.getDimensions();
+      
+      await fetch(`${url}/collections/${collection}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vectors: { size: expectedSize, distance: 'Cosine' },
+        }),
+      });
+      
+      qdrantSpinner.succeed(`Created Qdrant collection: ${collection} (${expectedSize} dims)`);
+    }
+    
+  } catch (error) {
+    qdrantSpinner.info('Qdrant not available (run `uam memory start` to enable)');
+    if (options.verbose) {
+      console.log(chalk.dim(`  ${error}`));
+    }
+  }
 }

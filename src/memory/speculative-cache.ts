@@ -3,7 +3,11 @@
  * 
  * Pre-computes likely next queries based on task patterns.
  * Reduces latency by predicting and caching memory retrievals.
+ * 
+ * Enhanced with task classifier integration for smarter prefetching
  */
+
+// Task classifier integration - TaskClassification type used in QUERY_PATTERNS
 
 export interface CacheEntry {
   query: string;
@@ -13,6 +17,7 @@ export interface CacheEntry {
   lastUsed: Date;
   createdAt: Date;
   predictedBy?: string;
+  taskCategory?: string; // Track which category this belongs to
 }
 
 export interface CacheConfig {

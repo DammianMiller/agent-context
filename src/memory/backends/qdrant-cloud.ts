@@ -4,24 +4,28 @@ import { getEmbeddingService } from '../embeddings.js';
 
 interface QdrantCloudBackendConfig {
   url: string;
-  apiKey: string;
+  apiKey?: string;
   collection: string;
+  vectorSize?: number; // Allow dynamic vector size based on embedding provider
 }
 
 export class QdrantCloudBackend implements MemoryBackend {
   private client: QdrantClient;
   private collection: string;
+  private vectorSize: number;
+  private collectionVerified: boolean = false;
 
   constructor(config: QdrantCloudBackendConfig) {
     const apiKey = config.apiKey || process.env.QDRANT_API_KEY;
     const url = config.url || process.env.QDRANT_URL;
     
-    if (!url || !apiKey) {
-      throw new Error('Qdrant Cloud URL and API key required (QDRANT_URL and QDRANT_API_KEY env vars or config)');
+    if (!url) {
+      throw new Error('Qdrant URL required (QDRANT_URL env var or config)');
     }
 
     this.client = new QdrantClient({ url, apiKey });
     this.collection = config.collection;
+    this.vectorSize = config.vectorSize || 768; // Default to Ollama's nomic-embed-text size
   }
 
   async isConfigured(): Promise<boolean> {
@@ -122,13 +126,53 @@ export class QdrantCloudBackend implements MemoryBackend {
   }
 
   private async ensureCollection(): Promise<void> {
+    if (this.collectionVerified) return;
+    
     const collections = await this.client.getCollections();
     const exists = collections.collections.some((c) => c.name === this.collection);
     
     if (!exists) {
+      // Create collection with correct vector size
       await this.client.createCollection(this.collection, {
-        vectors: { size: 384, distance: 'Cosine' },
+        vectors: { size: this.vectorSize, distance: 'Cosine' },
       });
+      this.collectionVerified = true;
+      return;
     }
+    
+    // Check if existing collection has correct dimensions
+    const collectionInfo = await this.client.getCollection(this.collection);
+    const currentSize = (collectionInfo.config?.params as { vectors?: { size?: number } })?.vectors?.size;
+    
+    if (currentSize && currentSize !== this.vectorSize) {
+      // Create new collection with correct dimensions (append suffix)
+      const newCollectionName = `${this.collection}_v${this.vectorSize}`;
+      const newExists = collections.collections.some((c) => c.name === newCollectionName);
+      
+      if (!newExists) {
+        await this.client.createCollection(newCollectionName, {
+          vectors: { size: this.vectorSize, distance: 'Cosine' },
+        });
+        console.log(`[Qdrant] Created new collection ${newCollectionName} with ${this.vectorSize} dimensions`);
+      }
+      
+      this.collection = newCollectionName;
+    }
+    
+    this.collectionVerified = true;
+  }
+
+  /**
+   * Get the actual collection name being used (may differ from config if dimension mismatch)
+   */
+  getCollectionName(): string {
+    return this.collection;
+  }
+
+  /**
+   * Get vector dimensions
+   */
+  getVectorSize(): number {
+    return this.vectorSize;
   }
 }

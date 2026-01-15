@@ -6,6 +6,9 @@ import type { MemoryEntry } from './base.js';
 vi.mock('@qdrant/js-client-rest', () => ({
   QdrantClient: vi.fn().mockImplementation(() => ({
     getCollections: vi.fn(),
+    getCollection: vi.fn().mockResolvedValue({
+      config: { params: { vectors: { size: 384 } } },
+    }),
     createCollection: vi.fn(),
     upsert: vi.fn(),
     search: vi.fn(),
@@ -64,7 +67,8 @@ describe('QdrantCloudBackend', () => {
     expect(mockClient.upsert).toHaveBeenCalled();
 
     const call = mockClient.upsert.mock.calls[0];
-    expect(call[0]).toBe('agent_memory');
+    // Collection name may be versioned if dimension migration occurred
+    expect(call[0]).toMatch(/^agent_memory/);
     expect(call[1].points).toHaveLength(1);
     expect(call[1].points[0].payload.content).toBe('Test memory');
     expect(call[1].points[0].payload.tags).toEqual(['tag1']);

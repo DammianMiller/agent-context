@@ -3,12 +3,104 @@
  * 
  * Retrieves relevant memories based on task content, not static context.
  * Implements semantic search with fallback to keyword matching.
+ * 
+ * Features:
+ * - Adaptive retrieval depth based on query complexity
+ * - Context budget management to prevent overflow
+ * - Speculative prefetch for common patterns
  */
 
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
 import { classifyTask, extractTaskEntities, getSuggestedMemoryQueries, type TaskClassification } from './task-classifier.js';
+import { ContextBudget } from './context-compressor.js';
+import { compressToSemanticUnits } from './semantic-compression.js';
+
+/**
+ * Query complexity levels for adaptive retrieval
+ */
+export type QueryComplexity = 'simple' | 'moderate' | 'complex';
+
+/**
+ * Retrieval depth configuration
+ */
+export interface RetrievalDepthConfig {
+  simple: { shortTerm: number; sessionMem: number; longTerm: number; patterns: number };
+  moderate: { shortTerm: number; sessionMem: number; longTerm: number; patterns: number };
+  complex: { shortTerm: number; sessionMem: number; longTerm: number; patterns: number };
+}
+
+const DEFAULT_RETRIEVAL_DEPTHS: RetrievalDepthConfig = {
+  simple: { shortTerm: 3, sessionMem: 2, longTerm: 3, patterns: 2 },
+  moderate: { shortTerm: 5, sessionMem: 4, longTerm: 5, patterns: 4 },
+  complex: { shortTerm: 8, sessionMem: 6, longTerm: 10, patterns: 6 },
+};
+
+/**
+ * Measure query complexity to determine retrieval depth
+ * Based on SimpleMem's adaptive query-aware retrieval
+ */
+export function measureQueryComplexity(query: string): QueryComplexity {
+  let score = 0;
+  
+  // Length-based scoring (lower thresholds)
+  const wordCount = query.split(/\s+/).length;
+  if (wordCount > 30) score += 1.5;
+  else if (wordCount > 12) score += 0.75;
+  else if (wordCount > 6) score += 0.25;
+  
+  // Technical terms increase complexity
+  const techPatterns = [
+    /debug|fix|error|exception|bug/i,
+    /implement|refactor|optimize|build/i,
+    /configure|setup|install|deploy/i,
+    /security|vulnerability|cve|auth/i,
+    /performance|memory|cpu|latency/i,
+    /database|query|migration|schema/i,
+    /test|coverage|mock|spec/i,
+  ];
+  
+  for (const pattern of techPatterns) {
+    if (pattern.test(query)) score += 0.4;
+  }
+  
+  // Multiple entities/files increase complexity
+  const fileMatches = query.match(/[\w./\\-]+\.(ts|js|py|json|yaml|sh|sql)/gi);
+  if (fileMatches) {
+    score += fileMatches.length * 0.3;
+  }
+  
+  // Multi-step tasks are complex
+  if (/and then|after that|followed by|step \d|first.*then|also|additionally/i.test(query)) {
+    score += 1;
+  }
+  
+  // Questions about "why" or "how" are moderate
+  if (/^(why|how|what caused|explain)/i.test(query)) {
+    score += 0.5;
+  }
+  
+  // Multiple actions in one query
+  const actionWords = query.match(/\b(fix|implement|configure|debug|create|update|delete|add|remove)\b/gi);
+  if (actionWords && actionWords.length > 1) {
+    score += actionWords.length * 0.3;
+  }
+  
+  if (score >= 2) return 'complex';
+  if (score >= 1) return 'moderate';
+  return 'simple';
+}
+
+/**
+ * Get retrieval limits based on query complexity
+ */
+export function getRetrievalDepth(
+  complexity: QueryComplexity,
+  config: RetrievalDepthConfig = DEFAULT_RETRIEVAL_DEPTHS
+): { shortTerm: number; sessionMem: number; longTerm: number; patterns: number } {
+  return config[complexity];
+}
 
 export interface RetrievedMemory {
   content: string;
@@ -24,92 +116,159 @@ export interface DynamicMemoryContext {
   gotchas: string[];
   projectContext: string;
   formattedContext: string;
+  queryComplexity: QueryComplexity;
+  tokenBudget: { used: number; remaining: number; total: number };
+  compressionStats?: { ratio: number; sourceTokens: number; compressedTokens: number };
 }
 
 /**
  * Main function to retrieve task-specific memory context
+ * Now with adaptive retrieval depth and context budget management
  */
 export async function retrieveDynamicMemoryContext(
   taskInstruction: string,
-  projectRoot: string = process.cwd()
+  projectRoot: string = process.cwd(),
+  options: {
+    maxTokens?: number;
+    useSemanticCompression?: boolean;
+  } = {}
 ): Promise<DynamicMemoryContext> {
+  const { maxTokens = 4000, useSemanticCompression = true } = options;
+  
   // Step 1: Classify the task
   const classification = classifyTask(taskInstruction);
   
-  // Step 2: Extract entities from task
+  // Step 2: Measure query complexity for adaptive retrieval
+  const queryComplexity = measureQueryComplexity(taskInstruction);
+  const retrievalDepth = getRetrievalDepth(queryComplexity);
+  
+  // Step 3: Initialize context budget
+  const budget = new ContextBudget(maxTokens);
+  
+  // Step 4: Extract entities from task
   const entities = extractTaskEntities(taskInstruction);
   
-  // Step 3: Get suggested memory queries
+  // Step 5: Get suggested memory queries
   const suggestedQueries = getSuggestedMemoryQueries(classification);
   
-  // Step 4: Query all memory sources
+  // Step 6: Query all memory sources with adaptive limits
   const memories = await queryAllMemorySources(
     taskInstruction,
     classification,
     entities,
     suggestedQueries,
-    projectRoot
+    projectRoot,
+    retrievalDepth
   );
   
-  // Step 5: Extract patterns and gotchas
-  const patterns = memories
+  // Step 7: Apply semantic compression if enabled and we have many memories
+  let compressionStats: DynamicMemoryContext['compressionStats'];
+  let processedMemories = memories;
+  
+  if (useSemanticCompression && memories.length > 5) {
+    const memoryData = memories.map(m => ({
+      content: m.content,
+      type: m.type,
+      importance: Math.round(m.relevance * 10),
+    }));
+    
+    const compressed = compressToSemanticUnits(memoryData);
+    compressionStats = {
+      ratio: compressed.overallRatio,
+      sourceTokens: compressed.totalSourceTokens,
+      compressedTokens: compressed.totalCompressedTokens,
+    };
+    
+    // Replace memories with compressed versions if significant savings
+    if (compressed.overallRatio > 1.5) {
+      processedMemories = compressed.units.flatMap(unit => 
+        unit.atomicFacts.map(fact => ({
+          content: fact.content,
+          type: fact.type === 'gotcha' ? 'gotcha' as const :
+                fact.type === 'lesson' ? 'lesson' as const :
+                fact.type === 'pattern' ? 'pattern' as const : 'context' as const,
+          relevance: fact.actionability,
+          source: 'semantic-compression',
+        }))
+      );
+    }
+  }
+  
+  // Step 8: Extract patterns and gotchas
+  const patterns = processedMemories
     .filter(m => m.type === 'pattern')
-    .map(m => m.content);
+    .map(m => m.content)
+    .slice(0, retrievalDepth.patterns);
   
-  const gotchas = memories
+  const gotchas = processedMemories
     .filter(m => m.type === 'gotcha')
-    .map(m => m.content);
+    .map(m => m.content)
+    .slice(0, retrievalDepth.patterns);
   
-  // Step 6: Get project-specific context
+  // Step 9: Get project-specific context
   const projectContext = await getProjectContext(classification, projectRoot);
   
-  // Step 7: Format the context with recency bias (critical at END)
-  const formattedContext = formatContextWithRecencyBias(
-    classification,
-    memories,
-    patterns,
-    gotchas,
-    projectContext
+  // Step 10: Format context with budget allocation
+  const { content: formattedContext } = budget.allocate(
+    'main',
+    formatContextWithRecencyBias(
+      classification,
+      processedMemories,
+      patterns,
+      gotchas,
+      projectContext
+    )
   );
   
   return {
     classification,
-    relevantMemories: memories,
+    relevantMemories: processedMemories,
     patterns,
     gotchas,
     projectContext,
     formattedContext,
+    queryComplexity,
+    tokenBudget: {
+      used: budget.usage().used,
+      remaining: budget.remaining(),
+      total: maxTokens,
+    },
+    compressionStats,
   };
 }
 
 /**
  * Query all memory sources for relevant information
+ * Uses adaptive retrieval depth to limit queries based on complexity
  */
 async function queryAllMemorySources(
   taskInstruction: string,
   classification: TaskClassification,
   entities: ReturnType<typeof extractTaskEntities>,
   suggestedQueries: string[],
-  projectRoot: string
+  projectRoot: string,
+  depth: { shortTerm: number; sessionMem: number; longTerm: number; patterns: number }
 ): Promise<RetrievedMemory[]> {
   const memories: RetrievedMemory[] = [];
   
-  // Source 1: Short-term SQLite memory
+  // Source 1: Short-term SQLite memory (limited by depth)
   const shortTermMemories = await queryShortTermMemory(
     classification,
     entities,
-    projectRoot
+    projectRoot,
+    depth.shortTerm
   );
   memories.push(...shortTermMemories);
   
-  // Source 2: Session memories (recent decisions)
-  const sessionMemories = await querySessionMemory(taskInstruction, projectRoot);
+  // Source 2: Session memories (limited by depth)
+  const sessionMemories = await querySessionMemory(taskInstruction, projectRoot, depth.sessionMem);
   memories.push(...sessionMemories);
   
-  // Source 3: Long-term prepopulated memory
+  // Source 3: Long-term prepopulated memory (limited by depth)
   const longTermMemories = await queryLongTermMemory(
     suggestedQueries,
-    projectRoot
+    projectRoot,
+    depth.longTerm
   );
   memories.push(...longTermMemories);
   
@@ -117,13 +276,14 @@ async function queryAllMemorySources(
   const claudeMdMemories = await queryCLAUDEMd(classification, projectRoot);
   memories.push(...claudeMdMemories);
   
-  // Source 5: Category-specific patterns from droids
-  const droidPatterns = getCategoryPatterns(classification);
+  // Source 5: Category-specific patterns from droids (limited by depth)
+  const droidPatterns = getCategoryPatterns(classification, depth.patterns);
   memories.push(...droidPatterns);
   
   // Deduplicate and sort by relevance
   const uniqueMemories = deduplicateMemories(memories);
-  return uniqueMemories.sort((a, b) => b.relevance - a.relevance).slice(0, 15);
+  const maxTotal = depth.shortTerm + depth.sessionMem + depth.longTerm + depth.patterns;
+  return uniqueMemories.sort((a, b) => b.relevance - a.relevance).slice(0, maxTotal);
 }
 
 /**
@@ -132,18 +292,20 @@ async function queryAllMemorySources(
 async function queryShortTermMemory(
   classification: TaskClassification,
   entities: ReturnType<typeof extractTaskEntities>,
-  projectRoot: string
+  projectRoot: string,
+  limit: number = 5
 ): Promise<RetrievedMemory[]> {
   const dbPath = join(projectRoot, 'agents/data/memory/short_term.db');
   if (!existsSync(dbPath)) return [];
   
   const memories: RetrievedMemory[] = [];
+  const perKeywordLimit = Math.max(1, Math.ceil(limit / 3));
   
   try {
     // Query by category keywords
     for (const keyword of classification.keywords.slice(0, 3)) {
       const result = execSync(
-        `sqlite3 "${dbPath}" "SELECT type, content FROM memories WHERE content LIKE '%${keyword}%' ORDER BY id DESC LIMIT 3;"`,
+        `sqlite3 "${dbPath}" "SELECT type, content FROM memories WHERE content LIKE '%${keyword}%' ORDER BY id DESC LIMIT ${perKeywordLimit};"`,
         { encoding: 'utf-8', timeout: 5000 }
       ).trim();
       
@@ -195,7 +357,8 @@ async function queryShortTermMemory(
  */
 async function querySessionMemory(
   _taskInstruction: string,
-  projectRoot: string
+  projectRoot: string,
+  limit: number = 5
 ): Promise<RetrievedMemory[]> {
   const dbPath = join(projectRoot, 'agents/data/memory/short_term.db');
   if (!existsSync(dbPath)) return [];
@@ -205,7 +368,7 @@ async function querySessionMemory(
   try {
     // Get recent high-importance session memories
     const result = execSync(
-      `sqlite3 "${dbPath}" "SELECT type, content FROM session_memories WHERE importance >= 7 ORDER BY id DESC LIMIT 5;"`,
+      `sqlite3 "${dbPath}" "SELECT type, content FROM session_memories WHERE importance >= 7 ORDER BY id DESC LIMIT ${limit};"`,
       { encoding: 'utf-8', timeout: 5000 }
     ).trim();
     
@@ -234,7 +397,8 @@ async function querySessionMemory(
  */
 async function queryLongTermMemory(
   queries: string[],
-  projectRoot: string
+  projectRoot: string,
+  _limit: number = 5
 ): Promise<RetrievedMemory[]> {
   const memoryPath = join(projectRoot, 'agents/data/memory/long_term_prepopulated.json');
   if (!existsSync(memoryPath)) return [];
@@ -247,10 +411,14 @@ async function queryLongTermMemory(
     
     // Simple keyword matching for now (semantic search would be better)
     for (const query of queries.slice(0, 5)) {
+      if (memories.length >= _limit) break;
+      
       const queryLower = query.toLowerCase();
       const queryWords = queryLower.split(/\s+/);
       
       for (const mem of allMemories) {
+        if (memories.length >= _limit) break;
+        
         const content = (mem.content || mem.text || JSON.stringify(mem)).toLowerCase();
         const matchCount = queryWords.filter(w => content.includes(w)).length;
         
@@ -338,7 +506,7 @@ async function queryCLAUDEMd(
 /**
  * Get category-specific patterns from droid knowledge
  */
-function getCategoryPatterns(classification: TaskClassification): RetrievedMemory[] {
+function getCategoryPatterns(classification: TaskClassification, limit: number = 4): RetrievedMemory[] {
   const patterns: RetrievedMemory[] = [];
   
   const categoryPatterns: Record<string, string[]> = {
@@ -381,7 +549,8 @@ function getCategoryPatterns(classification: TaskClassification): RetrievedMemor
   };
   
   const relevantPatterns = categoryPatterns[classification.category] || [];
-  for (const pattern of relevantPatterns) {
+  const patternLimit = Math.max(1, Math.ceil(limit * 0.6));
+  for (const pattern of relevantPatterns.slice(0, patternLimit)) {
     patterns.push({
       content: pattern,
       type: 'pattern',
@@ -398,7 +567,8 @@ function getCategoryPatterns(classification: TaskClassification): RetrievedMemor
     'Map.get() returns undefined for missing keys',
   ];
   
-  for (const gotcha of commonGotchas.slice(0, 2)) {
+  const gotchaLimit = Math.max(1, limit - patternLimit);
+  for (const gotcha of commonGotchas.slice(0, gotchaLimit)) {
     patterns.push({
       content: gotcha,
       type: 'gotcha',

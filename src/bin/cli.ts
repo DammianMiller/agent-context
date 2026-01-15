@@ -430,8 +430,11 @@ program
 
 program
   .command('update')
-  .description('Update templates while preserving all customizations')
+  .description('Update CLAUDE.md, memory system, and all related components')
   .option('--dry-run', 'Show what would be updated without making changes')
+  .option('--skip-memory', 'Skip memory system updates')
+  .option('--skip-qdrant', 'Skip Qdrant collection updates')
+  .option('-v, --verbose', 'Show detailed update information')
   .action(async (options) => {
     const { updateCommand } = await import('../cli/update.js');
     await updateCommand(options);

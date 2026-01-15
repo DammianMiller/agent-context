@@ -7,9 +7,21 @@ export * from './tasks/index.js';
 // Memory system exports
 export { getEmbeddingService, generateEmbedding, generateEmbeddings } from './memory/embeddings.js';
 export { classifyTask, extractTaskEntities, getSuggestedMemoryQueries } from './memory/task-classifier.js';
-export { retrieveDynamicMemoryContext } from './memory/dynamic-retrieval.js';
+export { retrieveDynamicMemoryContext, measureQueryComplexity, getRetrievalDepth } from './memory/dynamic-retrieval.js';
 export type { TaskClassification } from './memory/task-classifier.js';
-export type { DynamicMemoryContext, RetrievedMemory } from './memory/dynamic-retrieval.js';
+export type { DynamicMemoryContext, RetrievedMemory, QueryComplexity } from './memory/dynamic-retrieval.js';
+
+// Semantic compression
+export {
+  extractAtomicFacts,
+  createSemanticUnit,
+  compressToSemanticUnits,
+  serializeSemanticUnit,
+} from './memory/semantic-compression.js';
+export type { AtomicFact, SemanticUnit, SemanticCompressionConfig } from './memory/semantic-compression.js';
+
+// Ollama embedding support
+export { OllamaEmbeddingProvider } from './memory/embeddings.js';
 
 // New optimization modules
 export {
@@ -46,3 +58,19 @@ export {
   getServerlessQdrantManager,
   initServerlessQdrant,
 } from './memory/serverless-qdrant.js';
+
+// Multi-view memory with ENGRAM typing
+export {
+  MultiViewMemoryManager,
+  getMultiViewMemoryManager,
+  classifyENGRAMType,
+  extractTemporalBucket,
+} from './memory/multi-view-memory.js';
+export type {
+  ENGRAMMemoryType,
+  MultiViewMemory,
+  MultiViewIndex,
+} from './memory/multi-view-memory.js';
+
+// Entropy-aware compression
+export { calculateEntropy, calculateInformationDensity } from './memory/semantic-compression.js';
