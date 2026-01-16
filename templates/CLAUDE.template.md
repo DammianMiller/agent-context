@@ -1,7 +1,22 @@
 <!--
-  CLAUDE.md Universal Template - v9.0
+  CLAUDE.md Universal Template - v10.1
   
   CHANGES IN THIS VERSION:
+  - Pipeline-only infrastructure policy (--pipeline-only flag)
+  - Prohibited commands for kubectl/terraform direct usage
+  - Policy documents reference in Config Files section
+  - Enhanced completion checklist for infrastructure
+  
+  PREVIOUS (v10.0):
+  - Added 8 Universal Agent Patterns (discovered via Terminal-Bench 2.0)
+  - Pre-execution state protection (Pattern 3)
+  - Recipe following guidance (Pattern 2)
+  - CLI over libraries recommendation (Pattern 8)
+  - Critical reminders at END (exploits recency bias - Pattern 6)
+  - Enhanced decision loop with classification step (Pattern 7)
+  - Environment isolation awareness (Pattern 1)
+  
+  PREVIOUS (v9.0):
   - Fully universal with Handlebars placeholders (no hardcoded project content)
   - Context Field integration with Code Field prompt
   - Inhibition-style directives ("Do not X" creates blockers)
@@ -91,6 +106,12 @@ Under what conditions does this work?
 - Import complexity you don't need
 - Solve problems you weren't asked to solve
 - Produce code you wouldn't want to debug at 3am
+{{#if HAS_PIPELINE_POLICY}}
+- Run kubectl commands directly (use `ops-approved-operations.yml`)
+- Run terraform locally (use `iac-terraform-cicd.yml`)
+- Document manual infrastructure commands (link to pipelines instead)
+- Create secrets outside of Sealed Secrets or pipelines
+{{/if}}
 
 ### Expected Output Format
 
@@ -99,6 +120,140 @@ Under what conditions does this work?
 **After code**: "What this handles" and "What this does NOT handle" sections
 
 *Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
+
+---
+
+{{#if HAS_INFRA}}
+## 🚫 PIPELINE-ONLY POLICY - ABSOLUTE RULE
+
+**ALL infrastructure changes MUST go through CI/CD pipelines. NO EXCEPTIONS.**
+
+### Core Inhibitions
+
+```
+Do not run kubectl commands directly against clusters.
+Do not run terraform apply from local machines.
+Do not make changes via cloud console that should be in IaC.
+Do not document manual commands in runbooks - link to pipelines instead.
+```
+
+### Approved Pipelines
+
+| Task | Pipeline | Trigger |
+|------|----------|---------|
+| Kubernetes operations | `ops-approved-operations.yml` | Manual dispatch |
+| Ephemeral environments | `ops-create-ephemeral.yml` | Manual dispatch |
+| Terraform changes | `iac-terraform-cicd.yml` | PR to main |
+| Ephemeral Terraform | `ops-ephemeral-terraform.yml` | Manual dispatch |
+
+### One-Time Operations
+
+For operations that need to run once (migrations, data fixes, cleanups):
+
+1. Use `ops-create-ephemeral.yml` to create a pipeline
+2. Define the operation in the pipeline configuration
+3. Run via GitHub Actions workflow dispatch
+4. Pipeline self-destructs after completion
+
+### What This Means for Agents
+
+- **NEVER**: Run `kubectl apply`, `kubectl delete`, `kubectl patch` directly
+- **NEVER**: Run `terraform apply`, `terraform destroy` locally
+- **NEVER**: Create Kubernetes secrets via `kubectl create secret`
+- **ALWAYS**: Make infrastructure changes via PR → pipeline
+- **ALWAYS**: Use `ops-approved-operations.yml` for operational tasks
+- **ALWAYS**: Reference pipeline workflows instead of manual commands
+
+📖 See: `docs/adr/ADR-0006-pipeline-only-infrastructure-changes.md`
+
+{{/if}}
+---
+
+## 🎯 UNIVERSAL AGENT PATTERNS
+
+**Eight patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
+
+### Pattern 1: Environment Isolation
+Code installed during execution may NOT persist across phases (agent → test → deploy).
+- Check what dependencies are pre-installed before using them
+- Prefer pre-installed tools over installing new ones
+- Design for minimal dependency footprint
+
+### Pattern 2: Recipe Following
+LLMs excel at explicit step-by-step instructions but struggle with ambiguous tasks.
+- Convert complex tasks into numbered sequential commands
+- Each step should be atomic and verifiable
+- Provide exact commands, not descriptions
+
+```
+❌ "Set up a web server with SSL"
+✅ "1. Install nginx: apt-get install nginx
+    2. Generate key: openssl genrsa -out server.key 2048
+    3. Create cert: openssl req -new -x509 ..."
+```
+
+### Pattern 3: Pre-execution State Protection
+LLMs do NOT reliably follow negative instructions ("do not delete X").
+- Backup critical files BEFORE starting work
+- Never rely on "do not" for critical constraints
+- Protect state proactively, not reactively
+
+```bash
+# BEFORE modifying configs
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+
+# BEFORE database operations  
+sqlite3 db.sqlite ".backup /tmp/db_backup.sqlite"
+```
+
+### Pattern 4: Tool Specification
+Agents succeed more when told WHICH tool to use, not just WHAT to accomplish.
+- Specify exact tool and flags when possible
+- Reduce search space of possible approaches
+
+```
+❌ "Parse this JSON file"
+✅ "Use jq to parse: jq '.key' file.json"
+```
+
+### Pattern 5: Recognizing Impossible Tasks
+Some tasks require pre-computed solutions (compressed algorithms, lookup tables, trained models).
+- Identify tasks requiring: compression below limits, pre-trained weights, exhaustive search
+- These cannot be solved by reasoning alone
+- Detect early to avoid wasted computation
+
+### Pattern 6: Hierarchical Prompting (Recency Bias)
+LLMs weight information at the END of context more heavily.
+- Structure: capabilities → context → CRITICAL instructions
+- Put most important constraints at the END
+- Repeat critical instructions if essential
+
+### Pattern 7: Task Classification
+Different task types require different strategies.
+
+| Category | Strategy |
+|----------|----------|
+| State-sensitive | Pre-backup critical files |
+| Recipe-following | Step-by-step commands |
+| Tool-dependent | Specify exact tool + flags |
+| Research/exploration | Parallel searches |
+
+### Pattern 8: CLI over Libraries
+When environment dependencies are uncertain, prefer subprocess + CLI over library imports.
+- CLI tools more likely pre-installed
+- Better backward compatibility
+- Easier to verify: `which tool`
+
+```python
+# Less portable
+from cryptography import x509
+cert = x509.load_pem_x509_certificate(data)
+
+# More portable
+import subprocess
+result = subprocess.run(["openssl", "x509", "-in", "cert.pem", "-text"], 
+                        capture_output=True, text=True)
+```
 
 ---
 
@@ -254,27 +409,40 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 │                    EXECUTE FOR EVERY TASK                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  1. MEMORY   │ sqlite3 {{MEMORY_DB_PATH}} "...LIMIT 20"         │
+│  0. CLASSIFY │ What type? (Pattern 7)                           │
+│              │ State-sensitive → backup first (Pattern 3)        │
+│              │ Tool-dependent → specify tool (Pattern 4)         │
+│              │ Complex → break into steps (Pattern 2)            │
+│                                                                  │
+│  1. PROTECT  │ BACKUP critical files BEFORE any changes         │
+│              │ cp config config.bak (Pattern 3)                  │
+│              │ Check environment: which tool (Pattern 1, 8)      │
+│                                                                  │
+│  2. MEMORY   │ sqlite3 {{MEMORY_DB_PATH}} "...LIMIT 20"         │
 │              │ {{MEMORY_QUERY_CMD}} "<keywords>"                 │
 │              │ Check session_memories for current context        │
 │                                                                  │
-│  2. AGENTS   │ uam agent overlaps --resource "<files>"          │
+│  3. AGENTS   │ uam agent overlaps --resource "<files>"          │
 │              │ If overlap: coordinate or wait                    │
 │                                                                  │
-│  3. SKILLS   │ Check {{SKILLS_PATH}} for applicable skill        │
+│  4. SKILLS   │ Check {{SKILLS_PATH}} for applicable skill        │
 │              │ Invoke BEFORE implementing                        │
 │                                                                  │
-│  4. WORKTREE │ {{WORKTREE_CREATE_CMD}} <slug>                   │
+│  5. WORKTREE │ {{WORKTREE_CREATE_CMD}} <slug>                   │
 │              │ cd {{WORKTREE_DIR}}/NNN-<slug>/                  │
 │              │ NEVER commit directly to {{DEFAULT_BRANCH}}      │
 │                                                                  │
-│  5. WORK     │ Implement → Test → {{WORKTREE_PR_CMD}}           │
+│  6. WORK     │ Step-by-step execution (Pattern 2)                │
+│              │ Verify each step before proceeding                │
+│              │ Use CLI tools when possible (Pattern 8)           │
+│              │ Implement → Test → {{WORKTREE_PR_CMD}}           │
 │                                                                  │
-│  6. MEMORY   │ Update short-term after actions                   │
+│  7. MEMORY   │ Update short-term after actions                   │
 │              │ Update session_memories for decisions             │
 │              │ Store lessons in long-term (importance 7+)        │
 │                                                                  │
-│  7. VERIFY   │ ☐ Memory ☐ Worktree ☐ PR ☐ Skills ☐ Agents      │
+│  8. VERIFY   │ ☐ Backup made ☐ Memory ☐ Worktree ☐ PR          │
+│              │ ☐ Skills ☐ Agents ☐ Steps verified               │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -482,7 +650,60 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 {{#if HAS_INFRA}}
 ## 🏭 Infrastructure Workflow
 
+{{#if HAS_PIPELINE_POLICY}}
+**ALL infrastructure changes go through CI/CD pipelines. No exceptions.**
+
+### Standard Infrastructure Changes
+
+1. Create worktree: `{{WORKTREE_CREATE_CMD}} infra-<slug>`
+2. Make Terraform/Kubernetes changes in worktree
+3. Commit and push to feature branch
+4. Create PR targeting `{{DEFAULT_BRANCH}}`
+5. Pipeline `iac-terraform-cicd.yml` auto-runs terraform plan
+6. After merge, pipeline auto-applies changes
+
+### Operational Tasks
+
+For approved operational tasks (restarts, scaling, etc.):
+
+```bash
+gh workflow run ops-approved-operations.yml \
+  -f operation=restart \
+  -f target=deployment/my-service \
+  -f namespace=production
+```
+
+### One-Time Operations
+
+For migrations, data fixes, or cleanup tasks:
+
+```bash
+gh workflow run ops-create-ephemeral.yml \
+  -f operation_name=migrate-user-data \
+  -f commands="kubectl exec -it pod/db-0 -- psql -c 'UPDATE...'"
+```
+
+### PROHIBITED
+
+The following commands are **NEVER** allowed locally:
+
+```bash
+# ❌ PROHIBITED - use iac-terraform-cicd.yml instead
+terraform apply
+terraform destroy
+
+# ❌ PROHIBITED - use ops-approved-operations.yml instead  
+kubectl apply -f ...
+kubectl delete ...
+kubectl patch ...
+
+# ❌ PROHIBITED - use Sealed Secrets via pipeline
+kubectl create secret ...
+```
+
+{{else}}
 {{{INFRA_WORKFLOW}}}
+{{/if}}
 
 {{/if}}
 ## 🧪 Testing Requirements
@@ -512,6 +733,13 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 | `.gitignore` | Git ignore patterns |
 {{/if}}
 
+{{#if HAS_PIPELINE_POLICY}}
+### Policy Documents
+| Document | Purpose |
+|----------|---------|
+| `docs/adr/ADR-0006-pipeline-only-infrastructure-changes.md` | Pipeline-only policy |
+
+{{/if}}
 ---
 
 ## ✅ Completion Checklist
@@ -525,6 +753,11 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 ☐ Parallel reviews passed
 {{#if HAS_INFRA}}
 ☐ Terraform plan verified
+{{/if}}
+{{#if HAS_PIPELINE_POLICY}}
+☐ No manual kubectl commands (use pipelines)
+☐ No local terraform apply (use pipelines)
+☐ Infrastructure changes via iac-terraform-cicd.yml
 {{/if}}
 ☐ No secrets in code
 ```
@@ -629,3 +862,31 @@ gh run view <run-id>
 {{PROJECT_NAME}}/
 {{{REPOSITORY_STRUCTURE}}}
 ```
+
+---
+
+## ⚠️ CRITICAL REMINDERS (READ LAST)
+
+**These reminders exploit recency bias - place at END for maximum compliance.**
+
+1. **BACKUP FIRST**: Before modifying ANY config, database, or critical file:
+   ```bash
+   cp <file> <file>.bak
+   ```
+
+2. **CHECK ENVIRONMENT**: Before using a library, verify it exists:
+   ```bash
+   which <tool> || python3 -c "import <lib>" 2>/dev/null || echo "NOT AVAILABLE"
+   ```
+
+3. **USE CLI OVER LIBRARIES**: When in doubt, use subprocess + CLI tools.
+
+4. **STEP-BY-STEP**: Break complex tasks into numbered commands. Execute one at a time.
+
+5. **VERIFY EACH STEP**: Check output before proceeding to next step.
+
+6. **STATE-SENSITIVE OPERATIONS**: If task involves recovery, forensics, or state inspection - backup EVERYTHING first.
+
+7. **IMPOSSIBLE DETECTION**: If task requires compression magic, ML inference, or exhaustive search - flag as potentially impossible.
+
+8. **TEST IN ISOLATION**: Dependencies installed during work may not persist. Use pre-installed tools.

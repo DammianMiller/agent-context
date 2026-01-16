@@ -15,6 +15,7 @@ interface GenerateOptions {
   dryRun?: boolean;
   platform?: string;
   web?: boolean;
+  pipelineOnly?: boolean;
 }
 
 interface DependencyStatus {
@@ -185,13 +186,16 @@ export async function generateCommand(options: GenerateOptions): Promise<void> {
     }
   }
 
-  // Override config based on --web flag
-  // Web mode: set webDatabase to trigger web platform detection
-  // Desktop mode (default): force desktop even if config has webDatabase
-  const effectiveConfig: AgentContextConfig = isWebPlatform
-    ? {
-        ...config,
-        memory: {
+  // Apply --pipeline-only flag to config sections if provided
+  const pipelineOnlyEnabled = options.pipelineOnly || config.template?.sections?.pipelineOnly || false;
+  
+  // Override config based on flags
+  // --web: set webDatabase to trigger web platform detection
+  // --pipeline-only: enable pipeline-only infrastructure policy
+  const effectiveConfig: AgentContextConfig = {
+    ...config,
+    memory: isWebPlatform
+      ? {
           ...config.memory,
           shortTerm: {
             enabled: config.memory?.shortTerm?.enabled ?? true,
@@ -200,12 +204,9 @@ export async function generateCommand(options: GenerateOptions): Promise<void> {
             maxEntries: config.memory?.shortTerm?.maxEntries ?? 50,
             forceDesktop: false,
           },
-        },
-      }
-    : {
-        // Desktop mode: ensure forceDesktop is true to override any webDatabase in config
-        ...config,
-        memory: {
+        }
+      : {
+          // Desktop mode: ensure forceDesktop is true to override any webDatabase in config
           ...config.memory,
           shortTerm: config.memory?.shortTerm
             ? {
@@ -214,7 +215,21 @@ export async function generateCommand(options: GenerateOptions): Promise<void> {
               }
             : undefined,
         },
-      };
+    template: pipelineOnlyEnabled
+      ? {
+          extends: config.template?.extends ?? 'default',
+          sections: {
+            memorySystem: config.template?.sections?.memorySystem ?? true,
+            browserUsage: config.template?.sections?.browserUsage ?? true,
+            decisionLoop: config.template?.sections?.decisionLoop ?? true,
+            worktreeWorkflow: config.template?.sections?.worktreeWorkflow ?? true,
+            troubleshooting: config.template?.sections?.troubleshooting ?? true,
+            augmentedCapabilities: config.template?.sections?.augmentedCapabilities ?? true,
+            pipelineOnly: true,
+          },
+        }
+      : config.template,
+  };
 
   const genSpinner = ora(`${existingContent ? 'Merging' : 'Generating'} ${targetFileName}...`).start();
   try {

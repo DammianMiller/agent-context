@@ -13,6 +13,7 @@ interface InitOptions {
   web?: boolean;
   memory?: boolean;     // --no-memory sets this to false
   worktrees?: boolean;  // --no-worktrees sets this to false
+  pipelineOnly?: boolean; // --pipeline-only enables infrastructure policy
   force?: boolean;
 }
 
@@ -62,6 +63,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
   // No prompts - just works
   const withMemory = options.memory !== false;
   const withWorktrees = options.worktrees !== false;
+  const withPipelineOnly = options.pipelineOnly === true;
 
   // Load existing config if present to preserve user customizations
   let existingConfig: Partial<AgentContextConfig> = {};
@@ -125,6 +127,7 @@ export async function initCommand(options: InitOptions): Promise<void> {
         worktreeWorkflow: withWorktrees,
         troubleshooting: true,
         augmentedCapabilities: true,
+        pipelineOnly: withPipelineOnly,
         // codeField enabled by default in template v8.0
         ...existingConfig.template?.sections,
       },

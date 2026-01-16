@@ -115,6 +115,7 @@ export const TemplateSectionsSchema = z.object({
   worktreeWorkflow: z.boolean().default(true),
   troubleshooting: z.boolean().default(true),
   augmentedCapabilities: z.boolean().default(true),
+  pipelineOnly: z.boolean().default(false), // Enforce pipeline-only infrastructure policy
 });
 
 export const TemplateSchema = z.object({

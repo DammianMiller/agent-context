@@ -18,6 +18,7 @@ interface UpdateOptions {
   skipMemory?: boolean;
   skipQdrant?: boolean;
   verbose?: boolean;
+  pipelineOnly?: boolean;
 }
 
 export async function updateCommand(options: UpdateOptions): Promise<void> {
@@ -84,11 +85,30 @@ export async function updateCommand(options: UpdateOptions): Promise<void> {
     console.log(chalk.dim(`Created backup: ${backupPath}`));
   }
 
+  // Apply --pipeline-only flag to config if provided
+  const effectiveConfig: AgentContextConfig = options.pipelineOnly
+    ? {
+        ...config,
+        template: {
+          extends: config.template?.extends ?? 'default',
+          sections: {
+            memorySystem: config.template?.sections?.memorySystem ?? true,
+            browserUsage: config.template?.sections?.browserUsage ?? true,
+            decisionLoop: config.template?.sections?.decisionLoop ?? true,
+            worktreeWorkflow: config.template?.sections?.worktreeWorkflow ?? true,
+            troubleshooting: config.template?.sections?.troubleshooting ?? true,
+            augmentedCapabilities: config.template?.sections?.augmentedCapabilities ?? true,
+            pipelineOnly: true,
+          },
+        },
+      }
+    : config;
+
   // Generate new content from latest template
   const genSpinner = ora('Generating updated content from latest template...').start();
   let newContent: string;
   try {
-    newContent = await generateClaudeMd(analysis, config);
+    newContent = await generateClaudeMd(analysis, effectiveConfig);
     genSpinner.succeed('Generated updated content');
   } catch (error) {
     genSpinner.fail('Failed to generate new content');

@@ -35,6 +35,7 @@ program
   .option('--web', 'Generate AGENT.md for web platforms (claude.ai, factory.ai)')
   .option('--no-memory', 'Skip memory system setup')
   .option('--no-worktrees', 'Skip worktree workflow setup')
+  .option('--pipeline-only', 'Enforce pipeline-only infrastructure changes (no direct kubectl/terraform)')
   .option('-f, --force', 'Overwrite existing configuration')
   .action(initCommand);
 
@@ -52,6 +53,7 @@ program
   .option('-d, --dry-run', 'Show what would be generated without writing')
   .option('-p, --platform <platform>', 'Generate for specific platform only')
   .option('--web', 'Generate AGENT.md for web platforms (claude.ai, factory.ai)')
+  .option('--pipeline-only', 'Enforce pipeline-only infrastructure changes (no direct kubectl/terraform)')
   .action(generateCommand);
 
 program
@@ -434,6 +436,7 @@ program
   .option('--dry-run', 'Show what would be updated without making changes')
   .option('--skip-memory', 'Skip memory system updates')
   .option('--skip-qdrant', 'Skip Qdrant collection updates')
+  .option('--pipeline-only', 'Enforce pipeline-only infrastructure changes (no direct kubectl/terraform)')
   .option('-v, --verbose', 'Show detailed update information')
   .action(async (options) => {
     const { updateCommand } = await import('../cli/update.js');

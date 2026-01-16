@@ -208,7 +208,8 @@ async function buildContext(
     MULTI_ENV_CONFIG: null, // Project-specific
 
     // Infrastructure
-    HAS_INFRA: analysis.directories.infrastructure.length > 0,
+    HAS_INFRA: analysis.directories.infrastructure.length > 0 || config.template?.sections?.pipelineOnly,
+    HAS_PIPELINE_POLICY: config.template?.sections?.pipelineOnly || false,
     INFRA_WORKFLOW: infraWorkflow,
     CLUSTER_IDENTIFY: analysis.clusters?.enabled ? 'Identify which cluster(s) affected' : null,
 
