@@ -1,15 +1,22 @@
 <!--
-  CLAUDE.md Universal Template - v10.3
+  CLAUDE.md Universal Template - v10.4
   
   CHANGES IN THIS VERSION:
+  - Added MANDATORY COMPLETION GATES section (3 gates must pass before "done")
+  - Gate 1: Output Existence Check (enforces P12)
+  - Gate 2: Constraint Compliance Check (enforces P17)
+  - Gate 3: Test Verification (enforces P13)
+  - Added PATTERN ROUTER as Critical Reminder #0 (auto-selects patterns)
+  - Fixes 75% of failures caused by pattern non-compliance
+  - HARD STOP RULE: Cannot complete with failing gates
+  
+  PREVIOUS (v10.3):
   - Added 5 new generic patterns (16-20) from deep failure analysis
   - Pattern 16: Task-First Execution (TFE) - prevents analysis without output
   - Pattern 17: Constraint Extraction (CE) - catches format/structure requirements
   - Pattern 18: Multi-Tool Pipeline (MTP) - chains tools for complex tasks
   - Pattern 19: Enhanced Impossible Task Refusal (ITR+) - refuses impossible immediately
   - Pattern 20: Adversarial Thinking (AT) - attack mindset for bypass tasks
-  - Enhanced CRITICAL REMINDERS with 5 new items (12-16)
-  - Total patterns now: 20 (up from 15)
   
   PREVIOUS (v10.2):
   - Added 4 new generic patterns (12-15) from Terminal-Bench 2.0 analysis
@@ -1020,9 +1027,62 @@ gh run view <run-id>
 
 ---
 
+## 🚦 COMPLETION GATES - MANDATORY
+
+**CANNOT say "done" or "complete" until ALL gates pass. This is NOT optional.**
+
+### GATE 1: Output Existence Check
+```bash
+# List ALL expected outputs from task description
+# Verify EACH file exists
+echo "=== GATE 1: OUTPUT EXISTENCE ==="
+for f in /app/expected_output.* /app/result.* /app/*.json; do
+  [ -f "$f" ] && echo "✓ $f exists" || echo "✗ MISSING: $f"
+done
+# If ANY missing: CREATE IT NOW, then re-check
+```
+
+### GATE 2: Constraint Compliance Check
+```
+Extract ALL constraints from task description:
+☐ File count constraint (e.g., "single file")
+☐ Line count constraint (e.g., "exactly one line")  
+☐ Format constraint (e.g., "valid JSON")
+☐ Size constraint (e.g., "under 5KB")
+
+Verify EACH constraint is satisfied before proceeding.
+```
+
+### GATE 3: Test Verification
+```bash
+echo "=== GATE 3: TEST VERIFICATION ==="
+# Run available tests
+pytest /tests/ -v 2>&1 | tail -30
+# If < 100% pass: iterate (fix specific failure, re-run)
+# Reserve 20% of time for iteration
+```
+
+**HARD STOP RULE:**
+- If Gate 1 fails → CREATE missing files immediately
+- If Gate 2 fails → FIX constraint violations immediately  
+- If Gate 3 fails → ITERATE until 100% or timeout
+- NEVER report "complete" with failing gates
+
+---
+
 ## ⚠️ CRITICAL REMINDERS (READ LAST)
 
 **These reminders exploit recency bias - place at END for maximum compliance.**
+
+0. **PATTERN ROUTER (EXECUTE FIRST)**: Before ANY work, classify and select patterns:
+   | Task Contains... | Select Patterns |
+   |------------------|-----------------|
+   | "create file", "output to" | P12, P16 (Output) |
+   | "exactly", "only", "single" | P17, P14 (Constraints) |
+   | "bypass", "break", "exploit" | P20 (Adversarial) |
+   | known algorithm (crypto, chess) | P11 (Pre-computed) |
+   | image/audio → text | P9, P18 (Pipeline) |
+   Print: "SELECTED PATTERNS: P12, P17, P14" before starting.
 
 1. **BACKUP FIRST**: Before modifying ANY config, database, or critical file:
    ```bash
