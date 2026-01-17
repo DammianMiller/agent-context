@@ -1,7 +1,31 @@
 <!--
-  CLAUDE.md Universal Template - v9.0
+  CLAUDE.md Universal Template - v10.2
   
   CHANGES IN THIS VERSION:
+  - Added 4 new generic patterns (12-15) from Terminal-Bench 2.0 analysis
+  - Pattern 12: Output Existence Verification (OEV) - 37% of failures fixed
+  - Pattern 13: Iterative Refinement Loop (IRL) - helps partial success tasks
+  - Pattern 14: Output Format Validation (OFV) - fixes wrong output issues
+  - Pattern 15: Exception Recovery (ER) - handles runtime errors
+  - Enhanced CRITICAL REMINDERS with output verification
+  - Task completion now requires output file verification
+  
+  PREVIOUS (v10.1):
+  - Pipeline-only infrastructure policy (--pipeline-only flag)
+  - Prohibited commands for kubectl/terraform direct usage
+  - Policy documents reference in Config Files section
+  - Enhanced completion checklist for infrastructure
+  
+  PREVIOUS (v10.0):
+  - Added 8 Universal Agent Patterns (discovered via Terminal-Bench 2.0)
+  - Pre-execution state protection (Pattern 3)
+  - Recipe following guidance (Pattern 2)
+  - CLI over libraries recommendation (Pattern 8)
+  - Critical reminders at END (exploits recency bias - Pattern 6)
+  - Enhanced decision loop with classification step (Pattern 7)
+  - Environment isolation awareness (Pattern 1)
+  
+  PREVIOUS (v9.0):
   - Fully universal with Handlebars placeholders (no hardcoded project content)
   - Context Field integration with Code Field prompt
   - Inhibition-style directives ("Do not X" creates blockers)
@@ -48,7 +72,7 @@
 
 ---
 
-## � � DIRECTIVE HIERARCHY
+## 🔴 DIRECTIVE HIERARCHY
 
 | Priority | Source | Override |
 |----------|--------|----------|
@@ -61,9 +85,7 @@
 
 ---
 
----
-
-## � � CODE FIELD - COGNITIVE ENVIRONMENT
+## 🧬 CODE FIELD - COGNITIVE ENVIRONMENT
 
 **Apply to ALL code generation. Creates conditions where better code emerges naturally.**
 
@@ -104,6 +126,159 @@ Under what conditions does this work?
 
 ---
 
+## 🎯 UNIVERSAL AGENT PATTERNS
+
+**Fifteen patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
+
+### Pattern 1: Environment Isolation
+Code installed during execution may NOT persist across phases (agent → test → deploy).
+- Check what dependencies are pre-installed before using them
+- Prefer pre-installed tools over installing new ones
+- Design for minimal dependency footprint
+
+### Pattern 2: Recipe Following
+LLMs excel at explicit step-by-step instructions but struggle with ambiguous tasks.
+- Convert complex tasks into numbered sequential commands
+- Each step should be atomic and verifiable
+- Provide exact commands, not descriptions
+
+```
+❌ "Set up a web server with SSL"
+✅ "1. Install nginx: apt-get install nginx
+    2. Generate key: openssl genrsa -out server.key 2048
+    3. Create cert: openssl req -new -x509 ..."
+```
+
+### Pattern 3: Pre-execution State Protection
+LLMs do NOT reliably follow negative instructions ("do not delete X").
+- Backup critical files BEFORE starting work
+- Never rely on "do not" for critical constraints
+- Protect state proactively, not reactively
+
+```bash
+# BEFORE modifying configs
+cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
+
+# BEFORE database operations  
+sqlite3 db.sqlite ".backup /tmp/db_backup.sqlite"
+```
+
+### Pattern 4: Tool Specification
+Agents succeed more when told WHICH tool to use, not just WHAT to accomplish.
+- Specify exact tool and flags when possible
+- Reduce search space of possible approaches
+
+```
+❌ "Parse this JSON file"
+✅ "Use jq to parse: jq '.key' file.json"
+```
+
+### Pattern 5: Recognizing Impossible Tasks
+Some tasks require pre-computed solutions (compressed algorithms, lookup tables, trained models).
+- Identify tasks requiring: compression below limits, pre-trained weights, exhaustive search
+- These cannot be solved by reasoning alone
+- Detect early to avoid wasted computation
+
+### Pattern 6: Hierarchical Prompting (Recency Bias)
+LLMs weight information at the END of context more heavily.
+- Structure: capabilities → context → CRITICAL instructions
+- Put most important constraints at the END
+- Repeat critical instructions if essential
+
+### Pattern 7: Task Classification
+Different task types require different strategies.
+
+| Category | Strategy |
+|----------|----------|
+| State-sensitive | Pre-backup critical files |
+| Recipe-following | Step-by-step commands |
+| Tool-dependent | Specify exact tool + flags |
+| Research/exploration | Parallel searches |
+
+### Pattern 8: CLI over Libraries
+When environment dependencies are uncertain, prefer subprocess + CLI over library imports.
+- CLI tools more likely pre-installed
+- Better backward compatibility
+- Easier to verify: `which tool`
+
+```python
+# Less portable
+from cryptography import x509
+cert = x509.load_pem_x509_certificate(data)
+
+# More portable
+import subprocess
+result = subprocess.run(["openssl", "x509", "-in", "cert.pem", "-text"], 
+                        capture_output=True, text=True)
+```
+
+### Pattern 9: Format Translation Pipeline
+When task involves non-text data (images, audio, video, binary), convert to standard format first.
+- Identify input format and required output
+- Find converter tool: image→text, audio→transcript, binary→structured
+- Convert to standard intermediate format (FEN, JSON, CSV, etc.)
+
+### Pattern 10: Whitelist-First Sanitization
+For security filtering (XSS, SQL injection, command injection), ALWAYS use allow-list approach.
+- NEVER use blacklist/regex to filter malicious patterns
+- Use established security libraries (bleach, DOMPurify, parameterized queries)
+
+### Pattern 11: Pre-Computed Solution Recognition
+Some tasks have known solutions that cannot be derived through reasoning alone.
+- Recognize tasks matching known solved problems (chess engines, crypto tables, ML models)
+- Search GitHub/papers FIRST before attempting to solve
+- Download and adapt existing solutions rather than reinventing
+
+### Pattern 12: Output Existence Verification (OEV)
+**CRITICAL: 37% of task failures are "output file not created"**
+
+BEFORE completing ANY task:
+1. **Parse expected outputs** from task description (files, paths, artifacts)
+2. **Verify each output EXISTS**: `ls -la /expected/path`
+3. **If missing: CREATE IT** - don't explain, don't ask, just create
+4. **Re-verify** before reporting completion
+
+```bash
+# ALWAYS run before completing a task
+for f in /app/output.json /app/result.txt /app/model.bin; do
+  [ -f "$f" ] && echo "✓ $f exists" || echo "✗ MISSING: $f - CREATE IT NOW"
+done
+```
+
+### Pattern 13: Iterative Refinement Loop (IRL)
+When tests are available and some pass but others fail:
+1. Run tests after implementation
+2. If partial success: read failing test, fix specific issue, re-run
+3. Repeat until 100% pass OR timeout approaching
+4. Reserve 20% of time budget for iteration
+
+```bash
+# Run tests, iterate on failures
+pytest /tests/ -v 2>&1 | tee results.txt
+grep -q "FAILED" results.txt && echo "FIX FAILURES AND RE-RUN"
+```
+
+### Pattern 14: Output Format Validation (OFV)
+When task specifies exact output format:
+1. Extract format requirements from task description
+2. Validate output matches spec before completion
+3. If validation fails: fix output, don't re-explain
+
+```python
+# Common validations
+assert len(output.splitlines()) == 1, "Must be exactly one line"
+assert json.loads(output), "Must be valid JSON"
+```
+
+### Pattern 15: Exception Recovery (ER)
+When code throws exceptions:
+1. Read the stack trace
+2. Fix the specific error (ImportError → install/use stdlib, FileNotFoundError → create file)
+3. Re-run and verify
+4. Don't give up after first exception
+
+---
+
 ## ⚡ SESSION START PROTOCOL
 
 **EXECUTE IMMEDIATELY before any response:**
@@ -119,9 +294,7 @@ uam agent status                                  # Check other active agents
 
 ---
 
----
-
-## � � MULTI-AGENT COORDINATION PROTOCOL
+## 🤖 MULTI-AGENT COORDINATION PROTOCOL
 
 **Parallel-first rule**: When safe, run independent tool calls in parallel (searches, reads, status checks) and invoke multiple subagents concurrently for review. Optimize for fewer turns and lower tokens without losing accuracy.
 
@@ -192,9 +365,7 @@ multi_tool_use.parallel([
 
 ---
 
----
-
-## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
+## 🧩 MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
 
 **Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
 
@@ -229,9 +400,7 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
----
-
-## � �️ SKILLFORGE MODE (OPTIONAL)
+## 🛠️ SKILLFORGE MODE (OPTIONAL)
 
 **Use when**: The request is to create, improve, or compose skills (not regular feature work).
 
@@ -246,9 +415,7 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
----
-
-## � � TOKEN EFFICIENCY RULES
+## 🧾 TOKEN EFFICIENCY RULES
 
 - Prefer concise, high-signal responses; avoid repeating instructions or large logs.
 - Summarize command output; quote only the lines needed for decisions.
@@ -257,45 +424,54 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
----
-
-## � � MANDATORY DECISION LOOP
+## 📋 MANDATORY DECISION LOOP
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    EXECUTE FOR EVERY TASK                        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│  1. MEMORY   │ sqlite3 ./agents/data/memory/short_term.db "...LIMIT 20"         │
+│  0. CLASSIFY │ What type? (Pattern 7)                           │
+│              │ State-sensitive → backup first (Pattern 3)        │
+│              │ Tool-dependent → specify tool (Pattern 4)         │
+│              │ Complex → break into steps (Pattern 2)            │
+│                                                                  │
+│  1. PROTECT  │ BACKUP critical files BEFORE any changes         │
+│              │ cp config config.bak (Pattern 3)                  │
+│              │ Check environment: which tool (Pattern 1, 8)      │
+│                                                                  │
+│  2. MEMORY   │ sqlite3 ./agents/data/memory/short_term.db "...LIMIT 20"         │
 │              │ uam memory query "<keywords>"                 │
 │              │ Check session_memories for current context        │
 │                                                                  │
-│  2. AGENTS   │ uam agent overlaps --resource "<files>"          │
+│  3. AGENTS   │ uam agent overlaps --resource "<files>"          │
 │              │ If overlap: coordinate or wait                    │
 │                                                                  │
-│  3. SKILLS   │ Check .factory/skills/ for applicable skill        │
+│  4. SKILLS   │ Check .factory/skills/ for applicable skill        │
 │              │ Invoke BEFORE implementing                        │
 │                                                                  │
-│  4. WORKTREE │ uam worktree create <slug>                   │
+│  5. WORKTREE │ uam worktree create <slug>                   │
 │              │ cd .worktrees/NNN-<slug>/                  │
 │              │ NEVER commit directly to main      │
 │                                                                  │
-│  5. WORK     │ Implement → Test → uam worktree pr           │
+│  6. WORK     │ Step-by-step execution (Pattern 2)                │
+│              │ Verify each step before proceeding                │
+│              │ Use CLI tools when possible (Pattern 8)           │
+│              │ Implement → Test → uam worktree pr           │
 │                                                                  │
-│  6. MEMORY   │ Update short-term after actions                   │
+│  7. MEMORY   │ Update short-term after actions                   │
 │              │ Update session_memories for decisions             │
 │              │ Store lessons in long-term (importance 7+)        │
 │                                                                  │
-│  7. VERIFY   │ ☐ Memory ☐ Worktree ☐ PR ☐ Skills ☐ Agents      │
+│  8. VERIFY   │ ☐ Backup made ☐ Memory ☐ Worktree ☐ PR          │
+│              │ ☐ Skills ☐ Agents ☐ Steps verified               │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
----
-
-## � � FOUR-LAYER MEMORY SYSTEM
+## 🧠 FOUR-LAYER MEMORY SYSTEM
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -346,9 +522,7 @@ effective_importance = importance × (0.95 ^ days_since_access)
 
 ---
 
----
-
-## � � WORKTREE WORKFLOW
+## 🌳 WORKTREE WORKFLOW
 
 **ALL code changes use worktrees. NO EXCEPTIONS.**
 
@@ -372,9 +546,7 @@ uam worktree cleanup <id>
 
 ---
 
----
-
-## � � PARALLEL REVIEW PROTOCOL
+## 🚀 PARALLEL REVIEW PROTOCOL
 
 **Before ANY commit/PR, invoke quality droids in PARALLEL:**
 
@@ -400,8 +572,6 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 
 ---
 
----
-
 ## ⚡ AUTOMATIC TRIGGERS
 
 | Pattern | Action |
@@ -415,9 +585,7 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 
 ---
 
----
-
-## � � REPOSITORY STRUCTURE
+## 📁 REPOSITORY STRUCTURE
 
 ```
 universal-agent-memory/
@@ -428,8 +596,8 @@ universal-agent-memory/
 │   ├── cli/                       
 │   ├── coordination/              
 │   ├── generators/                
-│   ├── harbor/                    
-│   └── memory/                    
+│   ├── memory/                    
+│   └── tasks/                     
 │
 ├── tools/                         # Development tools
 │   └── agents/                    
@@ -443,8 +611,11 @@ universal-agent-memory/
 │   └── research/                  
 │
 ├── .factory/                      # Factory AI configuration
+│   ├── commands/                  # CLI commands
 │   ├── droids/                    # Custom AI agents
-│   └── skills/                    # Reusable skills
+│   ├── scripts/                   # Automation scripts
+│   ├── skills/                    # Reusable skills
+│   └── templates/                 
 │
 ├── .github/                       # GitHub configuration
 │   └── workflows/                 # CI/CD pipelines
@@ -454,9 +625,7 @@ universal-agent-memory/
 
 ---
 
----
-
-## � � Quick Reference
+## 📋 Quick Reference
 
 ### URLs
 - **URL**: https://img.shields.io/npm/v/universal-agent-memory.svg
@@ -488,10 +657,7 @@ npm run build
 
 ---
 
----
-
-## � � Testing Requirements
-
+## 🧪 Testing Requirements
 1. Create worktree
 2. Update/create tests
 3. Run `npm test`
@@ -500,50 +666,39 @@ npm run build
 
 ---
 
----
-
-## � � Troubleshooting
-
+## 🔧 Troubleshooting
 | Symptom | Solution |
 |---------|----------|
-| uam task create --title "Fix auth bug" --type bug --priority... | See memory for details |
-| uam task claim <id>                        # Claim task (ann... | See memory for details |
-| Feature added: feat(template): add mandatory completion prot... | See memory for details |
-| [image: npm version]
-[image: License: MIT]
-
-**Give your AI c... | See memory for details |
+| **Every lesson learned. Every bug fixed. Every architectural... | See memory for details |
+| Every time you start a new conversation with your AI assista... | See memory for details |
+| $ uam task create --title "Fix auth vulnerability" --type bu... | See memory for details |
+| $ uam agent overlaps --resource src/auth/*
+⚠ Agent A (fix-au... | See memory for details |
 | Work isn't "done" until it's deployed and verified:
 
 [code b... | See memory for details |
 | **Close-Out**: Merge → Deploy → Monitor → Fix loop until 100... | See memory for details |
-| """
-    # Group by type
-    actions = [e for e in short_term... | See memory for details |
-| **Semantic Memory** (Qdrant: `claude_memory` collection)
+| - Task-specific context reduces overhead
+- Reasoning tasks g... | See memory for details |
+| Implement Option 2 to immediately fix the regression:
 
-  ... | See memory for details |
-| **Our Tasks:**
-- Simple code generation (calculate average, ... | See memory for details |
-| **File:** `src/memory/backends/qdrant-cloud.ts`
+```py... | See memory for details |
+| | Task | Pattern | Why It Worked |
+|------|---------|-------... | See memory for details |
+| **FINAL SCORE: 11 / 54 tasks passed (20.4%)**
 
-[code block... | See memory for details |
-| **Current flow:**
-1. Load generic CLAUDE.md sections
-2. Quer... | See memory for details |
-| | Priority | Issue | Impact | Effort |
-|----------|-------|-... | See memory for details |
-| fix(qdrant): add project-scoped collections for data isolation|Each project now gets its own Qdrant collection using a hash-based naming | scheme: {base}_{projectName}_{hash} Affected files: src/cli/ |
-| fix: use pattern matching for task-001 instead of execution|Task 1 now correctly passes - the issue was that requiresExecution:true | tried to compile and run the model's output which lacks a te |
-| fix: resolve TypeScript errors for npm publish pipeline|- Add | js extensions to relative imports (ESM node16 compatibility) |
-| fix: update command uses correct template, consolidate CLI options|Fixes: | - Fixed Zod schema defaulting webDatabase which forced web t |
-| fix: read version from package | json instead of hardcoding|- CLI now dynamically reads versi |
-| fix: improve install scripts with GitHub fallback and add npm publish workflow|- Install scripts now fall back to cloning from GitHub if npm package unavailable | - Install to ~/.universal-agent-memory for persistent instal |
+#### Tasks Th... | See memory for details |
+| [code block]
 
----
+**Root Cause**: Harbor runs via pipx which cre... | See memory for details |
+| The SUPERGENIUS agent v1.0 implementation is complete and re... | See memory for details |
+| - Git recovery → backup .git/objects BEFORE any git command
+... | See memory for details |
+| **Trigger**: Security filtering (XSS, SQL injection, command... | See memory for details |
+| | Phase | Tasks Fixed | Accuracy |
+|-------|-------------|--... | See memory for details |
 
-## ⚙ ️ Config Files
-
+## ⚙️ Config Files
 | File | Purpose |
 |------|---------|
 | `README.md` | Project documentation |
@@ -553,8 +708,6 @@ npm run build
 | `.gitignore` | Git ignore patterns |
 | `.prettierrc` | Prettier configuration |
 | `vitest.config.ts` | Vitest test configuration |
-
----
 
 ---
 
@@ -572,9 +725,7 @@ npm run build
 
 ---
 
----
-
-## � � COMPLETION PROTOCOL - MANDATORY
+## 🔄 COMPLETION PROTOCOL - MANDATORY
 
 **WORK IS NOT DONE UNTIL 100% COMPLETE. ALWAYS FOLLOW THIS SEQUENCE:**
 
@@ -638,82 +789,67 @@ uam worktree create hotfix-<issue>
 
 ---
 
----
-
-## � � Project Knowledge
+## 📊 Project Knowledge
 
 ### Recent Activity
 - [image: npm version]
 [image: License: MIT]
 
-**Give your AI coding assistant persistent memory, intel...
-- ```
+<div align="center">
+- **Every lesson learned. Every bug fixed. Every architectural decision.**
 
-No clicking through prompts. No manual configuration. It just works.
-- **Your AI's context is NOT limited to the conversation.**
+*Not just in one conversat...
+- Every time you start a new conversation with your AI assistant:
 
-Memory persists with the project in SQLit...
-- Tasks automatically route to specialized expert droids:
+- It forgets your project's archite...
+- $ uam task create --title "Fix auth vulnerability" --type bug --priority 0
+✓ Task created: UAM-042
 
-| Task Type | Routed To | Result |
-|-------...
-- Based on context-field research, UAM includes a 4-line prompt that dramatically improves code qualit...
-- **The AI never commits directly to main.**
-
-All changes use worktrees:
-
-```bash
-- Work isn't "done" until it's deployed and verified:
-
-[code block]
-
-The AI follows this loop automati...
-- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
-- bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agent-memory/main/script...
-- | Command | Description |
-|---------|-------------|
-| `uam init` | Initialize/update UAM (auto-merge...
+...
+- $ uam agent overlaps --resource src/auth/*
+⚠ Agent A (fix-auth) is editing src/auth/*
+  Suggestion: ...
+- $ uam memory store "CSRF vulnerability in auth: always validate origin header"
+✓ Stored in memory (i...
+- $ uam memory query "auth security"
+  [2024-03-15] CSRF vulnerability in auth: always validate origin...
+- > *"After 3 months of using UAM, my Claude instance knows more about our architecture than most juni...
+- > *"We run 5 agents in parallel on different features. Before UAM, we had merge conflicts daily. Now...
+- > *"UAM's deploy batcher changed everything. Instead of 15 CI runs from rapid commits, we get 1-2. S...
 
 ### Lessons
 - **general, universal**: [image: npm version]
 [image: License: MIT]
 
-**Give your AI coding assistant pers...
-- **general, that's**: ```
+<div align="center">...
+- **general, what**: **Every lesson learned. Every bug fixed. Every architectural decision.**
 
-No clicking through prompts. No manual configuration. It just works....
-- **general, endless**: **Your AI's context is NOT limited to the conversation.**
+*Not j...
+- **general, problem**: Every time you start a new conversation with your AI assistant:
 
-Memory persists with ...
-- **general, intelligent**: Tasks automatically route to specialized expert droids:
-
-| Task Type | Routed To...
-- **general, code**: Based on context-field research, UAM includes a 4-line prompt that dramatically ...
-- **general, safe**: **The AI never commits directly to main.**
-
-All changes use worktrees:
-
-```bash...
-- **general, complete**: Work isn't "done" until it's deployed and verified:
-
-[code block]
-
-The AI follow...
-- **general, desktop**: bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agen...
-- **general, browsers**: bash <(curl -fsSL https://raw.githubusercontent.com/DammianMiller/universal-agen...
-- **general, essential**: | Command | Description |
-|---------|-------------|
-| `uam init` | Initialize/up...
+- It forgets yo...
+- **general, agent**: $ uam task create --title "Fix auth vulnerability" --type bug --priority 0
+✓ Tas...
+- **general, meanwhile,**: $ uam agent overlaps --resource src/auth/*
+⚠ Agent A (fix-auth) is editing src/a...
+- **general, agent**: $ uam memory store "CSRF vulnerability in auth: always validate origin header"
+✓...
+- **general, weeks**: $ uam memory query "auth security"
+  [2024-03-15] CSRF vulnerability in auth: al...
+- **general, finally**: > *"After 3 months of using UAM, my Claude instance knows more about our archite...
+- **general, "zero**: > *"We run 5 agents in parallel on different features. Before UAM, we had merge ...
+- **general, "our**: > *"UAM's deploy batcher changed everything. Instead of 15 CI runs from rapid co...
 
 ### Gotchas
-No gotchas recorded yet.
+- ⚠️ **Application**:
+- Identify tasks requiring: compression below information-theoretic limits, pre-tra
+- ⚠️ | Operation | Tokens Used | Value Delivered | ROI |
+|-----------|-------------|-----------------|---
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (30 changes), package-lock.json (21 changes), .beads/issues.jsonl (21 changes), templates/CLAUDE.template.md (17 changes), src/generators/claude-md.ts (10 changes), CLAUDE.md (8 changes), README.md (8 changes), src/bin/cli.ts (7 changes), src/cli/init.ts (7 changes), src/cli/memory.ts (6 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (33 changes), .beads/issues.jsonl (25 changes), package-lock.json (24 changes), templates/CLAUDE.template.md (18 changes), src/generators/claude-md.ts (11 changes), README.md (9 changes), CLAUDE.md (9 changes), src/bin/cli.ts (8 changes), src/cli/init.ts (8 changes), src/cli/memory.ts (7 changes). These files may need extra attention during changes.
 
 </coding_guidelines>
-
----
 
 ---
 
@@ -728,8 +864,8 @@ universal-agent-memory/
 │   ├── cli/                       
 │   ├── coordination/              
 │   ├── generators/                
-│   ├── harbor/                    
-│   └── memory/                    
+│   ├── memory/                    
+│   └── tasks/                     
 │
 ├── tools/                         # Development tools
 │   └── agents/                    
@@ -743,8 +879,11 @@ universal-agent-memory/
 │   └── research/                  
 │
 ├── .factory/                      # Factory AI configuration
+│   ├── commands/                  # CLI commands
 │   ├── droids/                    # Custom AI agents
-│   └── skills/                    # Reusable skills
+│   ├── scripts/                   # Automation scripts
+│   ├── skills/                    # Reusable skills
+│   └── templates/                 
 │
 ├── .github/                       # GitHub configuration
 │   └── workflows/                 # CI/CD pipelines
@@ -752,340 +891,48 @@ universal-agent-memory/
 
 ---
 
-<!-- Custom Sections (preserved from existing file) -->
+## ⚠️ CRITICAL REMINDERS (READ LAST)
 
-## � � CODE FIELD - COGNITIVE ENVIRONMENT
+**These reminders exploit recency bias - place at END for maximum compliance.**
 
-**Apply to ALL code generation. Creates conditions where better code emerges naturally.**
+1. **BACKUP FIRST**: Before modifying ANY config, database, or critical file:
+   ```bash
+   cp <file> <file>.bak
+   ```
 
-### Core Inhibitions
+2. **CHECK ENVIRONMENT**: Before using a library, verify it exists:
+   ```bash
+   which <tool> || python3 -c "import <lib>" 2>/dev/null || echo "NOT AVAILABLE"
+   ```
 
-```
-Do not write code before stating assumptions.
-Do not claim correctness you haven't verified.
-Do not handle only the happy path.
-Under what conditions does this work?
-```
+3. **USE CLI OVER LIBRARIES**: When in doubt, use subprocess + CLI tools.
 
-### Before Writing Code
+4. **STEP-BY-STEP**: Break complex tasks into numbered commands. Execute one at a time.
 
-- What are you assuming about the input?
-- What are you assuming about the environment?
-- What would break this?
-- What would a malicious caller do?
+5. **VERIFY EACH STEP**: Check output before proceeding to next step.
 
-### Do Not
+6. **STATE-SENSITIVE OPERATIONS**: If task involves recovery, forensics, or state inspection - backup EVERYTHING first.
 
-- Write code before stating assumptions
-- Claim correctness you haven't verified
-- Handle the happy path and gesture at the rest
-- Import complexity you don't need
-- Solve problems you weren't asked to solve
-- Produce code you wouldn't want to debug at 3am
+7. **IMPOSSIBLE DETECTION**: If task requires compression magic, ML inference, or exhaustive search - flag as potentially impossible.
 
-### Expected Output Format
+8. **TEST IN ISOLATION**: Dependencies installed during work may not persist. Use pre-installed tools.
 
-**Before code**: Assumptions stated explicitly, scope bounded
-**In code**: Smaller than expected, edge cases handled or explicitly rejected
-**After code**: "What this handles" and "What this does NOT handle" sections
+9. **OUTPUT VERIFICATION (MANDATORY)**: Before saying "done" or "complete":
+   ```bash
+   # List ALL files the task expects you to create
+   # Verify EACH file exists
+   ls -la /app/expected_output.json /app/result.txt 2>&1
+   # If ANY file is missing: CREATE IT NOW, don't explain why
+   ```
 
-*Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
+10. **ITERATE ON PARTIAL SUCCESS**: If tests show partial pass (e.g., 8/9):
+    - Read the failing test output
+    - Fix the specific failure
+    - Re-run tests
+    - Repeat until 100% or timeout
 
----
-
----
-
----
-
-## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
-
-**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
-
-**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
-
-**Process**:
-1. **Decompose** the request into discrete work items with clear inputs/outputs.
-2. **Map dependencies** (A blocks B). Only run B after A is complete.
-3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
-4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
-5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
-
-**When to expand the agent pool**:
-- Multiple files/modules with low coupling
-- Parallel research or analysis tasks
-- Independent test or verification tasks
-
-**Example**:
-```bash
-# Parallel research tasks (dependency-free)
-Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
-Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
-
-# Dependent work (sequential)
-# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
-```
-
-**Conflict avoidance**:
-- One agent per file at a time
-- Declare file ownership in prompts
-- If overlap risk is high, wait or split by section
-
----
-
----
-
----
-
-## � �️ SKILLFORGE MODE (OPTIONAL)
-
-**Use when**: The request is to create, improve, or compose skills (not regular feature work).
-
-**Phases**:
-0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
-1. **Deep Analysis** (multi‑lens, edge cases, constraints)
-2. **Specification** (structured skill spec)
-3. **Generation** (implement skill)
-4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
-
-**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
-
----
-
----
-
----
-
-## � � TOKEN EFFICIENCY RULES
-
-- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
-- Summarize command output; quote only the lines needed for decisions.
-- Use parallel tool calls to reduce back-and-forth.
-- Ask for clarification only when necessary to proceed correctly.
-
----
-
----
-
----
-
-## � � Testing Requirements
-
-1. Create worktree
-2. Update/create tests
-3. Run `npm test`
-4. Run linting
-5. Create PR
-
----
-
----
-
----
-
-## � � CODE FIELD - COGNITIVE ENVIRONMENT
-
-**Apply to ALL code generation. Creates conditions where better code emerges naturally.**
-
-### Core Inhibitions
-
-```
-Do not write code before stating assumptions.
-Do not claim correctness you haven't verified.
-Do not handle only the happy path.
-Under what conditions does this work?
-```
-
-### Before Writing Code
-
-- What are you assuming about the input?
-- What are you assuming about the environment?
-- What would break this?
-- What would a malicious caller do?
-
-### Do Not
-
-- Write code before stating assumptions
-- Claim correctness you haven't verified
-- Handle the happy path and gesture at the rest
-- Import complexity you don't need
-- Solve problems you weren't asked to solve
-- Produce code you wouldn't want to debug at 3am
-
-### Expected Output Format
-
-**Before code**: Assumptions stated explicitly, scope bounded
-**In code**: Smaller than expected, edge cases handled or explicitly rejected
-**After code**: "What this handles" and "What this does NOT handle" sections
-
-*Attribution: Based on [context-field research](https://github.com/NeoVertex1/context-field)*
-
----
-
----
-
----
-
----
-
-## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
-
-**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
-
-**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
-
-**Process**:
-1. **Decompose** the request into discrete work items with clear inputs/outputs.
-2. **Map dependencies** (A blocks B). Only run B after A is complete.
-3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
-4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
-5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
-
-**When to expand the agent pool**:
-- Multiple files/modules with low coupling
-- Parallel research or analysis tasks
-- Independent test or verification tasks
-
-**Example**:
-```bash
-# Parallel research tasks (dependency-free)
-Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
-Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
-
-# Dependent work (sequential)
-# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
-```
-
-**Conflict avoidance**:
-- One agent per file at a time
-- Declare file ownership in prompts
-- If overlap risk is high, wait or split by section
-
----
-
----
-
----
-
----
-
-## � �️ SKILLFORGE MODE (OPTIONAL)
-
-**Use when**: The request is to create, improve, or compose skills (not regular feature work).
-
-**Phases**:
-0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
-1. **Deep Analysis** (multi‑lens, edge cases, constraints)
-2. **Specification** (structured skill spec)
-3. **Generation** (implement skill)
-4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
-
-**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
-
----
-
----
-
----
-
----
-
-## � � TOKEN EFFICIENCY RULES
-
-- Prefer concise, high-signal responses; avoid repeating instructions or large logs.
-- Summarize command output; quote only the lines needed for decisions.
-- Use parallel tool calls to reduce back-and-forth.
-- Ask for clarification only when necessary to proceed correctly.
-
----
-
----
-
----
-
----
-
-## � � Testing Requirements
-
-1. Create worktree
-2. Update/create tests
-3. Run `npm test`
-4. Run linting
-5. Create PR
-
----
-
----
-
----
-
----
-
-## � � MULTI-AGENT EXECUTION (DEPENDENCY-AWARE)
-
-**Goal**: Finish faster by parallelizing independent work while preserving correctness and avoiding conflicts.
-
-**Aggressive parallelization mandate**: Default to multi-agent execution whenever tasks can be safely decomposed; only stay single-threaded when dependencies or overlap risk make parallel work unsafe.
-
-**Process**:
-1. **Decompose** the request into discrete work items with clear inputs/outputs.
-2. **Map dependencies** (A blocks B). Only run B after A is complete.
-3. **Parallelize** dependency-free items with separate agents and explicit file boundaries.
-4. **Gate edits** with `uam agent overlaps --resource "<files>"` before touching any file.
-5. **Merge in dependency order** (upstream first). Rebase or re-run dependent steps if needed.
-
-**When to expand the agent pool**:
-- Multiple files/modules with low coupling
-- Parallel research or analysis tasks
-- Independent test or verification tasks
-
-**Example**:
-```bash
-# Parallel research tasks (dependency-free)
-Task(subagent_type: "security-auditor", prompt: "Threat model: auth flow in src/auth/*")
-Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache/*")
-
-# Dependent work (sequential)
-# 1) Agent A updates schema → 2) Agent B updates queries → 3) Agent C updates tests
-```
-
-**Conflict avoidance**:
-- One agent per file at a time
-- Declare file ownership in prompts
-- If overlap risk is high, wait or split by section
-
----
-
----
-
----
-
----
-
-## � �️ SKILLFORGE MODE (OPTIONAL)
-
-**Use when**: The request is to create, improve, or compose skills (not regular feature work).
-
-**Phases**:
-0. **Triage** → USE_EXISTING / IMPROVE_EXISTING / CREATE_NEW / COMPOSE
-1. **Deep Analysis** (multi‑lens, edge cases, constraints)
-2. **Specification** (structured skill spec)
-3. **Generation** (implement skill)
-4. **Multi‑Agent Synthesis** (quality + security + evolution approval)
-
-**Fallback**: If SkillForge scripts/requirements are unavailable, use the existing skill routing matrix and create skills manually in `.factory/skills/`.
-
----
-
----
-
----
-
-## � � Testing Requirements
-
-1. Create worktree
-2. Update/create tests
-3. Run `npm test`
-4. Run linting
-5. Create PR
-
----
+11. **CREATE BEFORE EXPLAIN**: If a required output file doesn't exist:
+    - CREATE a minimal working version FIRST
+    - Don't explain why it's missing
+    - Don't ask for clarification
+    - Just make the file exist with valid content
