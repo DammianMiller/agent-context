@@ -1,14 +1,22 @@
 <!--
-  CLAUDE.md Universal Template - v10.2
+  CLAUDE.md Universal Template - v10.3
   
   CHANGES IN THIS VERSION:
+  - Added 5 new generic patterns (16-20) from deep failure analysis
+  - Pattern 16: Task-First Execution (TFE) - prevents analysis without output
+  - Pattern 17: Constraint Extraction (CE) - catches format/structure requirements
+  - Pattern 18: Multi-Tool Pipeline (MTP) - chains tools for complex tasks
+  - Pattern 19: Enhanced Impossible Task Refusal (ITR+) - refuses impossible immediately
+  - Pattern 20: Adversarial Thinking (AT) - attack mindset for bypass tasks
+  - Enhanced CRITICAL REMINDERS with 5 new items (12-16)
+  - Total patterns now: 20 (up from 15)
+  
+  PREVIOUS (v10.2):
   - Added 4 new generic patterns (12-15) from Terminal-Bench 2.0 analysis
   - Pattern 12: Output Existence Verification (OEV) - 37% of failures fixed
   - Pattern 13: Iterative Refinement Loop (IRL) - helps partial success tasks
   - Pattern 14: Output Format Validation (OFV) - fixes wrong output issues
   - Pattern 15: Exception Recovery (ER) - handles runtime errors
-  - Enhanced CRITICAL REMINDERS with output verification
-  - Task completion now requires output file verification
   
   PREVIOUS (v10.1):
   - Pipeline-only infrastructure policy (--pipeline-only flag)
@@ -128,7 +136,7 @@ Under what conditions does this work?
 
 ## 🎯 UNIVERSAL AGENT PATTERNS
 
-**Fifteen patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
+**Twenty patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
 
 ### Pattern 1: Environment Isolation
 Code installed during execution may NOT persist across phases (agent → test → deploy).
@@ -276,6 +284,79 @@ When code throws exceptions:
 2. Fix the specific error (ImportError → install/use stdlib, FileNotFoundError → create file)
 3. Re-run and verify
 4. Don't give up after first exception
+
+### Pattern 16: Task-First Execution (TFE)
+**CRITICAL: Prevents regression where agent analyzes but forgets to create outputs**
+
+BEFORE any analysis or exploration:
+1. **Parse task for REQUIRED OUTPUTS** (files, artifacts, states)
+2. **Create MINIMAL WORKING versions immediately** (touch files, create stubs)
+3. **THEN refine to full implementation**
+4. **Never finish a turn without outputs existing**
+
+```bash
+# Create placeholders FIRST
+touch /app/output.json /app/model.pt /app/cli.py
+# Then implement and overwrite with real content
+```
+
+### Pattern 17: Constraint Extraction (CE)
+Agent misses specific constraints buried in task descriptions.
+
+BEFORE implementing:
+1. **Parse for constraint keywords**: "exactly", "only", "single", "must be", "no more than"
+2. **Extract format constraints**: file types, line counts, size limits, response formats
+3. **Create constraint checklist**
+4. **Validate EACH constraint before completion**
+
+```
+Task: "Create single .rs file that outputs Fibonacci"
+CONSTRAINTS:
+☐ Single file (not multiple)
+☐ Extension: .rs
+☐ Output: Fibonacci numbers
+```
+
+### Pattern 18: Multi-Tool Pipeline (MTP)
+Complex tasks need multiple tools chained together.
+
+1. **Decompose task into stages** (input → transform → output)
+2. **Identify tool for EACH stage** (don't implement from scratch if tool exists)
+3. **Verify tools available**: `which tool || pip install package`
+4. **Chain in pipeline**
+
+```
+Task: "Find best chess move from board image"
+Pipeline: image → tesseract/vision → FEN → stockfish → move
+```
+
+### Pattern 19: Enhanced Impossible Task Refusal (ITR+)
+Pattern 5 identifies impossible tasks but agent still attempts them.
+
+**Impossibility markers → REFUSE IMMEDIATELY:**
+- Compression below Shannon limit (e.g., "GPT-2 in 5KB" - weights are 500MB+)
+- Pre-trained weights required but none provided
+- Exhaustive search in exponential space
+- Undecidable problems
+
+```bash
+# If impossible, create explanation file and STOP
+echo "IMPOSSIBLE: Task requires X but constraint limits to Y < X" > /app/IMPOSSIBLE.md
+# Do NOT attempt partial solutions
+```
+
+### Pattern 20: Adversarial Thinking (AT)
+Security bypass/attack tasks require "attacker mindset".
+
+1. **Detect**: Keywords "bypass", "break", "exploit", "circumvent", "evade"
+2. **Flip perspective**: Not "how to use correctly" but "how to break it"
+3. **Enumerate attack vectors** (case variation, encoding, null bytes, context breaking)
+4. **Test each vector until one works**
+
+```
+DEFENSIVE: "How do I use this filter?"
+ADVERSARIAL: "How do I craft input that bypasses the filter?"
+```
 
 ---
 
@@ -847,7 +928,7 @@ uam worktree create hotfix-<issue>
 |-----------|-------------|-----------------|---
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (33 changes), .beads/issues.jsonl (25 changes), package-lock.json (24 changes), templates/CLAUDE.template.md (18 changes), src/generators/claude-md.ts (11 changes), README.md (9 changes), CLAUDE.md (9 changes), src/bin/cli.ts (8 changes), src/cli/init.ts (8 changes), src/cli/memory.ts (7 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (34 changes), package-lock.json (25 changes), .beads/issues.jsonl (25 changes), templates/CLAUDE.template.md (19 changes), src/generators/claude-md.ts (11 changes), CLAUDE.md (10 changes), README.md (9 changes), src/bin/cli.ts (8 changes), src/cli/init.ts (8 changes), src/cli/memory.ts (7 changes). These files may need extra attention during changes.
 
 </coding_guidelines>
 
@@ -936,3 +1017,18 @@ universal-agent-memory/
     - Don't explain why it's missing
     - Don't ask for clarification
     - Just make the file exist with valid content
+
+12. **TASK-FIRST**: Create required output files BEFORE analyzing.
+    Touch placeholders immediately, then refine with real content.
+
+13. **EXTRACT CONSTRAINTS**: Before implementing, list ALL constraints from task:
+    Keywords: "exactly", "only", "single", "must be", formats, limits.
+
+14. **MULTI-TOOL PIPELINE**: For complex tasks, identify ALL tools needed.
+    Don't implement from scratch if existing tools exist.
+
+15. **REFUSE IMPOSSIBLE**: If task violates information theory (compress 500MB to 5KB),
+    REFUSE immediately. Create IMPOSSIBLE.md explaining why. Don't attempt.
+
+16. **ADVERSARIAL MINDSET**: For bypass/exploit tasks, think like an attacker.
+    Enumerate attack vectors (encoding, null bytes, case variation). Test each.
