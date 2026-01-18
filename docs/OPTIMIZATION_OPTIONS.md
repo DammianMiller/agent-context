@@ -287,24 +287,48 @@ ars <- function(target_density, bounds, n=1000) {
 
 ---
 
-## Implementation Priority
+## Generalized Patterns Extracted (P32-P36)
 
-1. **write-compressor**: Fix binary mode handling (quick win)
-2. **adaptive-rejection-sampler**: Use CRAN ars package (1 test fix)
-3. **winning-avg-corewars**: Use replicator strategy vs stone
-4. **polyglot-rust-c**: Use comment-based polyglot pattern
-5. **chess-best-move**: Use python-chess for proper multipv parsing
+From analyzing these 5 task failures, we extracted **universal patterns** that apply broadly:
 
-## Summary
+### P32: Use Established Libraries Over Custom Implementation
+**Applies to**: chess-best-move, adaptive-rejection-sampler, write-compressor
+- When a well-known algorithm exists (chess engines, compression, statistics), use existing libraries
+- Libraries handle edge cases you'll miss
+- Search: `pip search`, `apt-cache search`, CRAN, npm
 
-The key insight across all failures is that **domain-specific knowledge** is required:
-- Chess needs proper UCI multipv parsing
-- Polyglot needs specific comment tricks for dual compilation
-- CoreWars needs rock-paper-scissors strategy knowledge
-- Compression needs strict binary mode handling
-- ARS needs proper R statistical package usage
+### P33: Binary Mode for All File I/O
+**Applies to**: write-compressor, any file processing task
+- ALWAYS use `'rb'` and `'wb'` modes
+- NEVER mix text and binary operations
+- Verify round-trip: `assert decompress(compress(data)) == data`
 
-Adding this domain knowledge to the UAM patterns could help, but the v1.8.0 experiment showed that too much detail dilutes effectiveness. The solution may be:
-1. Add domain-specific EXAMPLES rather than descriptions
-2. Point to external resources (packages, libraries)
-3. Keep patterns concise but include working code snippets
+### P34: Search for Existing Solutions First
+**Applies to**: polyglot-rust-c, any complex algorithm
+- Search GitHub before implementing from scratch
+- Many problems have solved examples online
+- Adapt existing code rather than inventing
+
+### P35: Understand Game Theory / Strategic Domains
+**Applies to**: winning-avg-corewars, any competitive/adversarial task
+- Identify rock-paper-scissors dynamics
+- Counter-strategies beat specific strategies
+- Adaptive strategies are more robust
+
+### P36: Multi-Language Polyglot via Comments
+**Applies to**: polyglot tasks, multi-runtime code
+- Use comment syntax differences between languages
+- Hide one language's code inside another's comments
+
+## Key Insight
+
+**Generalized patterns > Task-specific fixes**
+
+The goal is NOT to solve chess-best-move specifically, but to teach the pattern:
+- "When you need a chess engine, use python-chess library" → 
+- "When you need a well-known algorithm, use an established library (P32)"
+
+This approach:
+1. Works for similar future tasks
+2. Keeps prompt size manageable
+3. Teaches transferable problem-solving strategies

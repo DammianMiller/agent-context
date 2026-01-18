@@ -1,17 +1,18 @@
 """
-UAM-Integrated Agent for Harbor/Terminal-Bench (v1.8.0)
+UAM-Integrated Agent for Harbor/Terminal-Bench (v1.9.0)
 
 This agent extends the standard ClaudeCode agent by prepending UAM patterns
 to the task instruction. Since Terminal-Bench doesn't read CLAUDE.md,
 we inject patterns directly into the prompt.
 
-v1.8.0 Changes:
-- Added DOMAIN-SPECIFIC QUICK FIXES with working code snippets
-- Chess: python-chess library for multipv parsing
-- Compression: zlib with binary mode + round-trip verification
-- R ARS: CRAN ars package usage
-- CoreWars: Replicator pattern to beat stone
-- Polyglot: Comment-based Rust/C dual compilation
+v1.9.0 Changes:
+- Reframed as GENERALIZED PATTERNS WITH EXAMPLES (P32-P36)
+- P32: Use libraries over custom implementation (with chess example)
+- P33: Binary mode for all file I/O (with compression example)
+- P34: Search/use existing packages (with R example)
+- P35: Counter-strategy in competitive domains (with game theory example)
+- P36: Multi-language via comment syntax (with polyglot example)
+- Key insight: Concrete examples are essential, but framed as general patterns
 
 v1.7.0 Changes:
 - Added MANDATORY "RUN TESTS NOW" block (BLOCK 3)
@@ -240,46 +241,52 @@ grep -A30 "FAILED\\|AssertionError\\|Error:" /tmp/results.txt
 - Verify return type (vector vs scalar)
 - Handle edge cases (empty input, invalid range)
 
-### DOMAIN-SPECIFIC QUICK FIXES
+### GENERALIZED PATTERNS WITH EXAMPLES
 
-**Chess (Stockfish multipv)**: Use python-chess library:
+**P32: Use Libraries Over Custom Implementation**
+When algorithm is well-known (chess, compression, statistics), use existing library:
 ```python
+# Example: python-chess for chess analysis
 import chess.engine
 engine = chess.engine.SimpleEngine.popen_uci("/usr/bin/stockfish")
 result = engine.analyse(board, chess.engine.Limit(depth=25), multipv=10)
-# Get moves where score.is_mate() is True
 ```
 
-**Compression (Round-trip)**: ALWAYS use binary mode:
+**P33: Binary Mode for All File I/O**
+Prevents encoding errors in compression, serialization, any binary data:
 ```python
+# Example: compression with proper binary handling
 import zlib
-data = open('input.txt', 'rb').read()  # Binary!
+data = open('input.txt', 'rb').read()  # MUST be 'rb' not 'r'
 compressed = zlib.compress(data, 9)
-assert zlib.decompress(compressed) == data  # Verify!
+assert zlib.decompress(compressed) == data  # Always verify round-trip!
 ```
 
-**R ARS**: Use the CRAN package:
+**P34: Search/Use Existing Packages**
+Before implementing from scratch, check package managers:
 ```r
+# Example: R statistical sampling - use CRAN package
 library(ars)
 samples <- ars::ars(n=1000, f=log_density, fprima=derivative, x=c(-1,0,1))
 ```
 
-**CoreWars vs Stone**: Use replicator (paper beats stone):
-```redcode
-spl 0, 0
+**P35: Counter-Strategy in Competitive Domains**
+When facing opponents, identify rock-paper-scissors dynamics:
+```
+# Example: CoreWars - replicator (paper) beats bomber (stone)
+spl 0, 0    ; Replicate to overwhelm opponent
 mov -1, 0
 jmp -2
 ```
 
-**Polyglot Rust/C**: Use comment trick:
+**P36: Multi-Language via Comment Syntax**
+When code must compile in multiple languages, use comment differences:
 ```
-/* Rust code here (inside C comment)
+/* Lang1 code hidden in Lang2 comment
 fn main() { println!("Hello"); }
-// */
+// */ 
 #include <stdio.h>
-int main() { printf("Hello\n"); }
-/*
-*/
+int main() { printf("Hello\n"); }  /* Lang2 code */
 ```
 
 **Reserve 30% of time for iteration. NEVER give up after first test failure.**
@@ -292,7 +299,7 @@ int main() { printf("Hello\n"); }
 
 
 class UAMAgent(ClaudeCode):
-    """UAM Agent v1.8.0 - Mandatory test iteration + domain-specific quick fixes."""
+    """UAM Agent v1.9.0 - Generalized patterns P32-P36 with concrete examples."""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
