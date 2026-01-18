@@ -41,11 +41,12 @@ UAM fixes this by giving AI agents:
 | Capability | What It Means |
 |------------|---------------|
 | **4-Layer Memory** | Recall decisions from months ago |
+| **36 Agent Patterns** | Battle-tested patterns from Terminal-Bench 2.0 |
+| **Pattern Router** | Auto-selects optimal patterns per task |
 | **Multi-Agent Coordination** | Multiple AIs work without conflicts |
-| **Task Intelligence** | Dependencies tracked, work structured |
 | **Worktree Isolation** | No accidental commits to main |
-| **Deploy Batching** | 50-80% CI/CD cost reduction |
 | **Code Field** | 89% bug detection vs 39% baseline |
+| **Completion Gates** | 3 mandatory checks before "done" |
 
 ---
 
@@ -139,6 +140,107 @@ Tasks automatically route to specialized expert droids:
 ```bash
 uam droids add rust-expert --capabilities "ownership,lifetimes,async" --triggers "*.rs"
 ```
+
+### 🎯 Pattern Router - Battle-Tested Intelligence
+
+**36 patterns discovered through Terminal-Bench 2.0 analysis (52.5% pass rate on 40 hard tasks).**
+
+Before ANY task, UAM's Pattern Router auto-selects which patterns apply:
+
+```
+=== PATTERN ROUTER ===
+Task: Implement user authentication
+Classification: file-creation
+
+SELECTED PATTERNS:
+- P12 (OEV): YES - Task creates files
+- P17 (CE): YES - Has constraints ("must use bcrypt")
+- P3 (State Protection): YES - Modifies config files
+
+ACTIVE PATTERNS: P3, P12, P17
+=== END ROUTER ===
+```
+
+**Key Patterns:**
+
+| Pattern | Name | Impact |
+|---------|------|--------|
+| **P12** | Output Existence Verification | Fixes 37% of agent failures |
+| **P17** | Constraint Extraction | Catches "exactly/only/single" requirements |
+| **P3** | Pre-execution State Protection | Backups before destructive actions |
+| **P20** | Adversarial Thinking | Attack mindset for security bypass tasks |
+| **P21** | Chess Engine Integration | Use Stockfish, don't reason about chess |
+| **P23** | Compression Impossibility Detection | Refuse impossible compression tasks |
+
+**Pattern Categories:**
+- **Execution (P1-P8)**: Environment isolation, recipe following, CLI over libraries
+- **Output (P12-P16)**: File creation verification, format validation
+- **Constraints (P17)**: Extract hidden requirements from task descriptions
+- **Domain (P21-P26)**: Chess, git recovery, compression, polyglot code
+- **Verification (P27-P31)**: Output cleanup, smoke tests, round-trip checks
+- **Advanced (P32-P36)**: CLI execution, numerical stability, decoder-first analysis
+
+---
+
+### 🔬 What Works vs What Doesn't (From 40-Task Benchmark)
+
+**Strengths (100% pass rate in category):**
+
+| Category | Why It Works |
+|----------|--------------|
+| **ML/Data Processing** | Clear data transformation, pandas/numpy operations |
+| **Graphics/Rendering** | Path tracing, POV-Ray - well-defined algorithms |
+| **Security Tasks** | Hash cracking, password recovery - tools available |
+| **Formal Verification** | Coq proofs - step-by-step tactics |
+
+**Weaknesses (Common failure modes):**
+
+| Failure Mode | Fix |
+|--------------|-----|
+| **"File not created"** (37%) | P12 - Verify outputs exist before completing |
+| **Missed constraints** | P17 - Extract "exactly/only/single" keywords |
+| **First action destroys state** | P3 - Backup before agent runs |
+| **Impossible tasks attempted** | P5/P23 - Detect and refuse immediately |
+| **Complex toolchain setup** | Pre-execution hooks for dependencies |
+
+**Near-Misses (High-value improvements):**
+
+| Task | Tests | Fix Needed |
+|------|-------|------------|
+| adaptive-rejection-sampler | 8/9 (89%) | Numerical edge case |
+| headless-terminal | 6/7 (86%) | Service startup timing |
+| db-wal-recovery | 5/7 (71%) | WAL parsing edge case |
+
+**Tasks That Will Never Pass (Without External Tools):**
+- `gpt2-codegolf` - Requires pre-computed weights (500MB → 5KB impossible)
+- `chess-best-move` - Requires vision/image parsing
+- `break-filter-js-from-html` - Requires pre-computed XSS bypass patterns
+
+---
+
+### 🚦 Completion Gates - Mandatory Quality Checks
+
+Three gates must pass before the AI reports "done":
+
+| Gate | Check | If Fails |
+|------|-------|----------|
+| **Gate 1** | All output files exist | CREATE immediately |
+| **Gate 2** | All constraints satisfied | FIX violations |
+| **Gate 3** | All tests pass | ITERATE until 100% |
+
+```bash
+# Gate 1: Verify outputs
+ls -la /expected/output.json /expected/result.txt
+# If missing → CREATE NOW, don't explain
+
+# Gate 2: Check constraints
+# Printed checklist with ☐/☑ for each requirement
+
+# Gate 3: Run tests
+npm test  # Iterate on failures until 100%
+```
+
+---
 
 ### 🔒 Code Field - Better Code Generation
 
@@ -336,12 +438,16 @@ Configuration in `.uam.json`:
 
 ## Built-in Expert Droids
 
-| Droid | Specialization |
-|-------|----------------|
-| `code-quality-guardian` | SOLID, complexity, naming |
-| `security-auditor` | OWASP, secrets, injection |
-| `performance-optimizer` | Algorithms, memory, caching |
-| `documentation-expert` | JSDoc, README, accuracy |
+| Droid | Specialization | When Used |
+|-------|----------------|-----------|
+| `code-quality-guardian` | SOLID, complexity, naming | Before every PR |
+| `security-auditor` | OWASP, secrets, injection | Before every PR |
+| `performance-optimizer` | Algorithms, memory, caching | On request |
+| `documentation-expert` | JSDoc, README, accuracy | On request |
+| `debug-expert` | Dependency conflicts, runtime errors | Error handling |
+| `sysadmin-expert` | Kernel, QEMU, networking | Infrastructure tasks |
+| `ml-training-expert` | Model training, MTEB, datasets | ML tasks |
+| `terminal-bench-optimizer` | Task routing, time budgets | Benchmarking |
 
 ## Requirements
 
@@ -374,18 +480,28 @@ Want to understand how UAM works under the hood?
 
 | Document | Description |
 |----------|-------------|
-| [UAM Complete Analysis](docs/UAM_COMPLETE_ANALYSIS.md) | Full system architecture, all features, performance implications |
-| [Deploy Batcher Analysis](docs/DEPLOY_BATCHER_ANALYSIS.md) | CI/CD optimization deep dive with mermaid diagrams |
+| [UAM Complete Analysis](docs/UAM_COMPLETE_ANALYSIS.md) | Full system architecture, all features |
+| [Terminal-Bench Learnings](docs/TERMINAL_BENCH_LEARNINGS.md) | 8 universal agent patterns discovered |
+| [Behavioral Patterns](docs/BEHAVIORAL_PATTERNS.md) | What works vs what doesn't analysis |
+| [Failing Tasks Solution Plan](docs/FAILING_TASKS_SOLUTION_PLAN.md) | Detailed fix strategies for each failure mode |
+| [Benchmark Results](benchmark-results/) | All Terminal-Bench 2.0 run results |
 
 ---
 
 ## What's Next?
 
-UAM is actively developed. Coming soon:
+UAM is actively developed. Recent additions:
 
-- **Semantic Memory Search** - Vector embeddings for natural language recall
+- ✅ **36 Agent Patterns** - Battle-tested from Terminal-Bench 2.0
+- ✅ **Pattern Router** - Auto-selects optimal patterns per task
+- ✅ **Completion Gates** - 3 mandatory checks before "done"
+- ✅ **8 Expert Droids** - Specialized agents for common tasks
+- ✅ **PROJECT.md Separation** - Seamless template upgrades
+
+Coming soon:
+
+- **Pre-execution Hooks** - Task-specific setup before agent runs
 - **Cross-Project Learning** - Share patterns between codebases
-- **Agent Personas** - Specialized agents with distinct expertise
 - **Visual Memory Dashboard** - See what your AI knows
 
 **Star the repo** to follow updates. **Open an issue** to request features.

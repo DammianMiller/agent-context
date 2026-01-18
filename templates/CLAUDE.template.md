@@ -1468,6 +1468,7 @@ gh run view <run-id>
 
 ---
 
+{{#unless HAS_PROJECT_MD}}
 ## Repository Structure
 
 ```
@@ -1476,6 +1477,7 @@ gh run view <run-id>
 ```
 
 ---
+{{/unless}}
 
 ## 🚦 COMPLETION GATES - MANDATORY
 
