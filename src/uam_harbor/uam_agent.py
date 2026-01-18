@@ -1,9 +1,15 @@
 """
-UAM-Integrated Agent for Harbor/Terminal-Bench (v1.11.0)
+UAM-Integrated Agent for Harbor/Terminal-Bench (v1.12.0)
 
 This agent extends the standard ClaudeCode agent by prepending UAM patterns
 to the task instruction. Since Terminal-Bench doesn't read CLAUDE.md,
 we inject patterns directly into the prompt.
+
+v1.12.0 Changes:
+- ENHANCED XSS FILTER HOOKS: Strategy for byte-for-byte preservation of clean HTML
+- ENHANCED COMPRESSION HOOKS: Full decoder analysis, segfault debugging guide
+- Added /tmp/xss_filter_strategy.txt with format-preserving approach
+- Added /tmp/compression_strategy.txt with step-by-step debugging
 
 v1.11.0 Changes:
 - INTEGRATED PRE-EXECUTION HOOKS: Tasks now get domain-specific setup
@@ -343,7 +349,7 @@ int main() { printf("Hello\n"); }  /* Lang2 code */
 
 
 class UAMAgent(ClaudeCode):
-    """UAM Agent v1.11.0 - Integrated pre-execution hooks for domain tasks."""
+    """UAM Agent v1.12.0 - Enhanced XSS and compression hooks."""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

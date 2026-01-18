@@ -28,12 +28,67 @@ PRE_EXECUTION_HOOKS: Dict[str, dict] = {
     },
     'filter-js-from-html': {
         'detection_keywords': ['filter', 'javascript', 'html', 'xss'],
-        'description': 'Pre-install bleach for XSS filtering',
+        'description': 'Setup XSS filtering with format-preserving approach',
         'commands': [
-            'pip install bleach lxml 2>/dev/null || pip3 install bleach lxml',
+            'pip install bleach lxml beautifulsoup4 html5lib 2>/dev/null || pip3 install bleach lxml beautifulsoup4 html5lib',
+            # Create strategy guide for XSS filtering
+            '''cat > /tmp/xss_filter_strategy.txt << 'STRATEGY'
+=== XSS FILTER REQUIREMENTS ===
+
+CRITICAL: Clean HTML must remain BYTE-FOR-BYTE IDENTICAL after filtering.
+This means you CANNOT use bleach.clean() or BeautifulSoup directly - they normalize HTML.
+
+RECOMMENDED APPROACH:
+1. Detect if HTML contains dangerous patterns (script, onclick, javascript:, etc.)
+2. If NO dangerous patterns: return original HTML unchanged (preserve formatting!)
+3. If dangerous patterns found: use regex or targeted removal
+
+DANGEROUS PATTERNS TO REMOVE:
+- <script>...</script> tags
+- on* event handlers (onclick, onerror, onload, onmouseover, etc.)
+- javascript: URLs
+- data: URLs with script content
+- <iframe>, <object>, <embed> tags
+- style attributes with expression()
+- SVG with script content
+
+WHITELIST APPROACH (safer):
+- Keep only safe tags: p, div, span, a, img, table, tr, td, th, ul, ol, li, h1-h6, etc.
+- Keep only safe attributes: href (not javascript:), src (not javascript:), class, id, style (filtered)
+
+EXAMPLE FILTER STRUCTURE:
+```python
+import re
+
+def has_dangerous_content(html):
+    patterns = [
+        r'<script[^>]*>.*?</script>',
+        r'\bon\w+\s*=',
+        r'javascript:',
+        r'<iframe',
+        r'<object',
+        r'<embed',
+    ]
+    for p in patterns:
+        if re.search(p, html, re.I | re.S):
+            return True
+    return False
+
+def filter_html(html):
+    if not has_dangerous_content(html):
+        return html  # PRESERVE ORIGINAL EXACTLY
+    # Only sanitize if dangerous content detected
+    return sanitize(html)
+```
+
+TEST YOUR FILTER:
+1. Clean HTML input -> must return IDENTICAL output
+2. XSS attack input -> must remove/neutralize the attack
+STRATEGY
+echo "XSS filter strategy saved to /tmp/xss_filter_strategy.txt"''',
         ],
-        'critical': False,
-        'reason': 'Ensures bleach is available for XSS filtering',
+        'critical': True,
+        'reason': 'XSS filter must preserve clean HTML byte-for-byte while blocking attacks',
     },
     'gpt2-codegolf': {
         'detection_keywords': ['gpt2', 'gpt-2', '124m', 'codegolf', 'inference'],
@@ -94,29 +149,116 @@ chmod +x /tmp/extract_fen.py''',
     },
     'write-compressor': {
         'detection_keywords': ['compress', 'decompressor', 'decomp', 'encode'],
-        'description': 'Analyze provided decompressor format first',
+        'description': 'Analyze provided decompressor format and create comprehensive strategy',
         'commands': [
             # Analyze decompressor to understand expected format
-            '''if [ -f /app/decomp.c ]; then
+            '''if [ -f /app/decomp.c ] || [ -f /app/decomp2.c ]; then
+    DECOMP_FILE=$(ls /app/decomp*.c 2>/dev/null | head -1)
     echo "=== DECODER ANALYSIS ===" > /tmp/decoder_analysis.txt
-    grep -n "fread\|getchar\|read\|fgetc" /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
-    grep -n "struct\|typedef" /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
-    head -100 /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    echo "File: $DECOMP_FILE" >> /tmp/decoder_analysis.txt
+    echo "" >> /tmp/decoder_analysis.txt
+    echo "=== INPUT READING PATTERN ===" >> /tmp/decoder_analysis.txt
+    grep -n "fread\|getchar\|read\|fgetc\|stdin" "$DECOMP_FILE" >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    echo "" >> /tmp/decoder_analysis.txt
+    echo "=== DATA STRUCTURES ===" >> /tmp/decoder_analysis.txt
+    grep -n "struct\|typedef\|#define" "$DECOMP_FILE" >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    echo "" >> /tmp/decoder_analysis.txt
+    echo "=== FULL SOURCE ===" >> /tmp/decoder_analysis.txt
+    cat "$DECOMP_FILE" >> /tmp/decoder_analysis.txt 2>/dev/null || true
     echo "Decoder analysis saved to /tmp/decoder_analysis.txt"
 fi''',
-            # Create simple test for round-trip
+            # Create comprehensive strategy guide
+            '''cat > /tmp/compression_strategy.txt << 'STRATEGY'
+=== COMPRESSION TASK STRATEGY ===
+
+CRITICAL REQUIREMENTS:
+1. Compressed output must decompress to EXACT original content
+2. Compressed file must be smaller than size limit (often ~2500 bytes)
+3. Decompressor (decomp/decomp2) must not segfault on your output
+
+COMMON FAILURE MODES:
+- Segmentation fault: Your format doesn't match what decoder expects
+- Wrong output: Encoding/decoding mismatch
+- Size too large: Need better compression algorithm
+
+RECOMMENDED APPROACH:
+1. READ THE DECODER SOURCE FIRST (/tmp/decoder_analysis.txt)
+2. Understand EXACTLY what format the decoder expects
+3. Write encoder that produces that EXACT format
+4. Test with SMALL data first (1 byte, then 10 bytes)
+5. Scale up only after small tests pass
+
+EXAMPLE: If decoder reads bytes with getchar():
+```python
+# Write raw bytes that decoder expects
+with open('output.comp', 'wb') as f:
+    f.write(encoded_bytes)
+```
+
+EXAMPLE: If decoder expects length-prefixed data:
+```python
+import struct
+data = b"hello"
+with open('output.comp', 'wb') as f:
+    f.write(struct.pack('<I', len(data)))  # 4-byte little-endian length
+    f.write(data)
+```
+
+TESTING (do this BEFORE submitting):
+```bash
+# Test with tiny data
+echo -n "A" > /tmp/tiny.txt
+python3 compress.py /tmp/tiny.txt /tmp/tiny.comp
+cat /tmp/tiny.comp | ./decomp2 > /tmp/tiny.out
+diff /tmp/tiny.txt /tmp/tiny.out && echo "PASS" || echo "FAIL"
+
+# Test with actual data
+python3 compress.py /app/data.txt /app/data.comp
+cat /app/data.comp | ./decomp2 > /tmp/test.out
+diff /app/data.txt /tmp/test.out && echo "PASS" || echo "FAIL"
+```
+
+IF SEGFAULT:
+- Your output format is wrong
+- Check decoder source for expected header/format
+- Use binary mode: open('file', 'wb') not open('file', 'w')
+STRATEGY
+echo "Compression strategy saved to /tmp/compression_strategy.txt"''',
+            # Create round-trip test script
             '''cat > /tmp/test_roundtrip.sh << 'ROUNDTRIP'
 #!/bin/bash
-echo "Testing round-trip..."
-echo "test" > /tmp/original.txt
-./compress /tmp/original.txt /tmp/test.comp 2>/dev/null
-./decomp < /tmp/test.comp > /tmp/recovered.txt 2>/dev/null
-diff /tmp/original.txt /tmp/recovered.txt && echo "PASS" || echo "FAIL"
+echo "=== Round-trip Test ==="
+
+# Find decompressor
+DECOMP=$(ls /app/decomp2 /app/decomp 2>/dev/null | head -1)
+echo "Using decompressor: $DECOMP"
+
+# Test with tiny data first
+echo -n "X" > /tmp/tiny.txt
+if [ -f /app/compress.py ]; then
+    python3 /app/compress.py /tmp/tiny.txt /tmp/tiny.comp 2>&1
+elif [ -x /app/compress ]; then
+    /app/compress /tmp/tiny.txt /tmp/tiny.comp 2>&1
+fi
+
+if [ -f /tmp/tiny.comp ]; then
+    echo "Compressed size: $(wc -c < /tmp/tiny.comp) bytes"
+    cat /tmp/tiny.comp | $DECOMP > /tmp/tiny.out 2>&1
+    if diff -q /tmp/tiny.txt /tmp/tiny.out > /dev/null 2>&1; then
+        echo "TINY TEST: PASS"
+    else
+        echo "TINY TEST: FAIL - output differs"
+        echo "Expected: $(xxd /tmp/tiny.txt)"
+        echo "Got: $(xxd /tmp/tiny.out)"
+    fi
+else
+    echo "TINY TEST: FAIL - no compressed output"
+fi
 ROUNDTRIP
 chmod +x /tmp/test_roundtrip.sh''',
         ],
         'critical': True,
-        'reason': 'Must understand decoder format before implementing encoder',
+        'reason': 'Must understand decoder format before implementing encoder - segfaults = wrong format',
     },
     'winning-avg-corewars': {
         'detection_keywords': ['corewars', 'warrior', 'pmars', 'redcode', 'win rate'],
@@ -233,6 +375,21 @@ python-chess has been pre-installed. Use it to:
 2. Understand move notation
 3. Build and test your regex patterns''',
 
+        'filter-js-from-html': '''## Pre-Execution Hook Results
+
+XSS filter strategy guide prepared:
+- /tmp/xss_filter_strategy.txt: CRITICAL requirements and approach
+
+**READ THIS FIRST**: Clean HTML must remain BYTE-FOR-BYTE IDENTICAL.
+Do NOT use bleach.clean() or BeautifulSoup directly - they normalize HTML!
+
+APPROACH:
+1. Check if HTML has dangerous patterns (script, onclick, javascript:)
+2. If CLEAN: return original unchanged (preserve formatting!)
+3. If DANGEROUS: use regex to remove only the malicious parts
+
+Read /tmp/xss_filter_strategy.txt for the full pattern list and example code.''',
+
         'chess-best-move': '''## Pre-Execution Hook Results
 
 Chess image recognition tools installed:
@@ -256,12 +413,22 @@ Use: pytesseract.image_to_string(Image.open('image.png'))''',
 
         'write-compressor': '''## Pre-Execution Hook Results
 
-Decoder analysis prepared:
-- /tmp/decoder_analysis.txt: Key input patterns from decoder source
-- /tmp/test_roundtrip.sh: Script to test round-trip compression
+Compression strategy resources prepared:
+- /tmp/decoder_analysis.txt: FULL decoder source with input patterns highlighted
+- /tmp/compression_strategy.txt: Step-by-step approach and common failure fixes
+- /tmp/test_roundtrip.sh: Test script for verifying round-trip
 
-**CRITICAL**: Read /tmp/decoder_analysis.txt FIRST to understand expected format.
-Test round-trip BEFORE optimizing for size.''',
+**CRITICAL - READ THESE FILES FIRST:**
+1. Read /tmp/decoder_analysis.txt to understand EXACT format decoder expects
+2. Read /tmp/compression_strategy.txt for approach and debugging tips
+3. Use /tmp/test_roundtrip.sh to test with tiny data before full file
+
+**IF SEGFAULT**: Your output format is wrong. Check decoder source for:
+- Header format (magic bytes, length prefix)
+- How it reads input (getchar, fread, etc.)
+- Expected data layout
+
+Test with 1-byte input before trying full file!''',
 
         'winning-avg-corewars': '''## Pre-Execution Hook Results
 
