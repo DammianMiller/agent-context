@@ -56,13 +56,105 @@ PRE_EXECUTION_HOOKS: Dict[str, dict] = {
     },
     'chess-best-move': {
         'detection_keywords': ['chess', 'best move', 'board', 'image'],
-        'description': 'Install chess libraries and optional stockfish',
+        'description': 'Install chess libraries, image recognition, and stockfish',
         'commands': [
-            'pip install python-chess pillow 2>/dev/null || pip3 install python-chess pillow',
-            'apt-get install -y stockfish 2>/dev/null || true',
+            'pip install python-chess pillow opencv-python-headless numpy 2>/dev/null || pip3 install python-chess pillow opencv-python-headless numpy',
+            'pip install board_to_fen 2>/dev/null || pip3 install board_to_fen 2>/dev/null || true',
+            'apt-get update && apt-get install -y stockfish tesseract-ocr 2>/dev/null || true',
+            # Create helper script for FEN extraction
+            '''cat > /tmp/extract_fen.py << 'FENSCRIPT'
+#!/usr/bin/env python3
+"""Chess board image to FEN converter - uses board_to_fen if available, falls back to manual."""
+import sys
+try:
+    from board_to_fen import predict
+    fen = predict(sys.argv[1])
+    print(fen)
+except ImportError:
+    print("board_to_fen not available - manual FEN entry required", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+FENSCRIPT
+chmod +x /tmp/extract_fen.py''',
+        ],
+        'critical': True,
+        'reason': 'Visual FEN extraction unreliable - need image recognition library',
+    },
+    'code-from-image': {
+        'detection_keywords': ['code', 'image', 'ocr', 'screenshot', 'extract'],
+        'description': 'Install OCR tools for code extraction from images',
+        'commands': [
+            'pip install pytesseract pillow opencv-python-headless 2>/dev/null || pip3 install pytesseract pillow opencv-python-headless',
+            'apt-get update && apt-get install -y tesseract-ocr 2>/dev/null || true',
         ],
         'critical': False,
-        'reason': 'Provides chess analysis tools',
+        'reason': 'OCR required for extracting code from images',
+    },
+    'write-compressor': {
+        'detection_keywords': ['compress', 'decompressor', 'decomp', 'encode'],
+        'description': 'Analyze provided decompressor format first',
+        'commands': [
+            # Analyze decompressor to understand expected format
+            '''if [ -f /app/decomp.c ]; then
+    echo "=== DECODER ANALYSIS ===" > /tmp/decoder_analysis.txt
+    grep -n "fread\|getchar\|read\|fgetc" /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    grep -n "struct\|typedef" /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    head -100 /app/decomp.c >> /tmp/decoder_analysis.txt 2>/dev/null || true
+    echo "Decoder analysis saved to /tmp/decoder_analysis.txt"
+fi''',
+            # Create simple test for round-trip
+            '''cat > /tmp/test_roundtrip.sh << 'ROUNDTRIP'
+#!/bin/bash
+echo "Testing round-trip..."
+echo "test" > /tmp/original.txt
+./compress /tmp/original.txt /tmp/test.comp 2>/dev/null
+./decomp < /tmp/test.comp > /tmp/recovered.txt 2>/dev/null
+diff /tmp/original.txt /tmp/recovered.txt && echo "PASS" || echo "FAIL"
+ROUNDTRIP
+chmod +x /tmp/test_roundtrip.sh''',
+        ],
+        'critical': True,
+        'reason': 'Must understand decoder format before implementing encoder',
+    },
+    'winning-avg-corewars': {
+        'detection_keywords': ['corewars', 'warrior', 'pmars', 'redcode', 'win rate'],
+        'description': 'Research winning strategies against provided opponents',
+        'commands': [
+            # Analyze opponent warriors to understand strategies
+            '''if [ -d /app/warriors ]; then
+    echo "=== OPPONENT ANALYSIS ===" > /tmp/opponent_analysis.txt
+    for f in /app/warriors/*.red; do
+        echo "--- $(basename $f) ---" >> /tmp/opponent_analysis.txt
+        head -30 "$f" >> /tmp/opponent_analysis.txt
+    done
+    echo "Opponent analysis saved to /tmp/opponent_analysis.txt"
+fi''',
+            # Create strategy guide
+            '''cat > /tmp/corewars_strategies.txt << 'STRATEGY'
+=== COREWARS WINNING STRATEGIES ===
+
+PAPER beats STONE (self-replication faster than bombing)
+IMP ties but rarely wins (defensive, avoids DAT bombs)
+VAMPIRE captures processes (JMP traps)
+SCANNER detects and targets opponent code
+
+RECOMMENDED APPROACH for Stone opponent:
+1. Use Paper-style self-replication
+2. Combine with Imp backup for ties
+3. Add bomber component against non-stone
+
+PAPER EXAMPLE:
+    spl 0, 0
+    mov -1, @0
+    add #100, -1
+    jmz -2, @-2
+STRATEGY
+echo "Strategy guide saved to /tmp/corewars_strategies.txt"''',
+        ],
+        'critical': False,
+        'reason': 'Domain-specific strategies essential for competitive tasks',
     },
 }
 
@@ -140,6 +232,45 @@ python-chess has been pre-installed. Use it to:
 1. Generate legal moves for test positions
 2. Understand move notation
 3. Build and test your regex patterns''',
+
+        'chess-best-move': '''## Pre-Execution Hook Results
+
+Chess image recognition tools installed:
+- board_to_fen: For converting chess board images to FEN (may not be available)
+- python-chess: For move validation and analysis
+- stockfish: For finding best moves
+- /tmp/extract_fen.py: Helper script for FEN extraction
+
+**CRITICAL**: Do NOT rely on visual reasoning for FEN. Try:
+1. python3 /tmp/extract_fen.py /app/chess_board.png
+2. If that fails, use stockfish with position from task or manually
+3. Use stockfish for ALL move calculations''',
+
+        'code-from-image': '''## Pre-Execution Hook Results
+
+OCR tools installed:
+- tesseract-ocr: For text extraction from images
+- pytesseract: Python wrapper for tesseract
+
+Use: pytesseract.image_to_string(Image.open('image.png'))''',
+
+        'write-compressor': '''## Pre-Execution Hook Results
+
+Decoder analysis prepared:
+- /tmp/decoder_analysis.txt: Key input patterns from decoder source
+- /tmp/test_roundtrip.sh: Script to test round-trip compression
+
+**CRITICAL**: Read /tmp/decoder_analysis.txt FIRST to understand expected format.
+Test round-trip BEFORE optimizing for size.''',
+
+        'winning-avg-corewars': '''## Pre-Execution Hook Results
+
+Strategy resources prepared:
+- /tmp/opponent_analysis.txt: Analysis of provided opponent warriors
+- /tmp/corewars_strategies.txt: Winning strategy guide
+
+**KEY INSIGHT**: Paper beats Stone! Use self-replication strategy.
+Read /tmp/corewars_strategies.txt for specific tactics.''',
     }
     
     return contexts.get(task_name, '')
