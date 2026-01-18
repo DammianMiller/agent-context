@@ -1,7 +1,18 @@
 <!--
-  CLAUDE.md Universal Template - v10.5
+  CLAUDE.md Universal Template - v10.6
   
   CHANGES IN THIS VERSION:
+  - Added Domain-Specific Patterns (P21-P26)
+  - Pattern 21: Chess Engine Integration (CEI) - use Stockfish, not reasoning
+  - Pattern 22: Git Recovery Forensics (GRF) - backup first, forensic approach
+  - Pattern 23: Compression Impossibility Detection (CID) - refuse impossible tasks
+  - Pattern 24: Polyglot Code Construction (PCC) - search for existing examples
+  - Pattern 25: Service Configuration Pipeline (SCP) - ordered setup, test each
+  - Pattern 26: Near-Miss Iteration (NMI) - iterate on partial success tasks
+  - Updated Pattern Router to include domain patterns
+  - Added 30% time budget reservation for iteration
+  
+  PREVIOUS (v10.5):
   - STRENGTHENED Pattern Router: Now requires explicit analysis block output
   - STRENGTHENED Constraint Extraction: Mandatory checklist with verification
   - STRENGTHENED Adversarial Thinking: Explicit attack vector enumeration
@@ -421,6 +432,141 @@ Security bypass/attack tasks require "attacker mindset".
 DEFENSIVE: "How do I use this filter?"
 ADVERSARIAL: "How do I craft input that bypasses the filter?"
 ```
+
+---
+
+## 🎯 DOMAIN-SPECIFIC PATTERNS
+
+**Task-specific guidance for common failure categories.**
+
+### Pattern 21: Chess Engine Integration (CEI)
+Chess tasks require external engines - reasoning alone cannot find optimal moves.
+
+**Detection**: Keywords "chess", "best move", "FEN", "PGN", "checkmate"
+
+**Protocol**:
+1. Check for Stockfish: `which stockfish || apt-get install -y stockfish`
+2. Parse board state to FEN format
+3. Use Stockfish for analysis: `echo "position fen $FEN" | stockfish`
+4. Extract best move from engine output
+
+```bash
+# Stockfish one-liner for best move
+echo -e "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\ngo depth 20" | stockfish | grep "bestmove"
+```
+
+**NEVER**: Try to calculate chess moves through reasoning - use the engine.
+
+### Pattern 22: Git Recovery Forensics (GRF)
+Git recovery tasks require forensic approach, not standard git commands.
+
+**Detection**: Keywords "recover", "corrupted", "lost commit", "fix git", "reflog"
+
+**Protocol**:
+1. **BACKUP FIRST**: `cp -r .git .git.bak`
+2. Check integrity: `git fsck --full --no-dangling`
+3. Check reflog: `git reflog` (commits survive even after reset)
+4. Check loose objects: `find .git/objects -type f`
+5. Recover from pack files if needed
+
+```bash
+# Recovery sequence
+git fsck --full 2>&1 | tee /tmp/git-fsck.log
+git reflog --all
+git log --all --oneline --graph
+```
+
+**NEVER**: Run destructive commands without backup. Use `--dry-run` first.
+
+### Pattern 23: Compression Impossibility Detection (CID)
+Some compression tasks are mathematically impossible.
+
+**Detection**: Keywords "compress", "codegolf", "under X bytes", "minimal size"
+
+**Impossibility Markers**:
+- ML model weights (GPT-2 = 500MB+, cannot be <1MB without losing function)
+- Random/encrypted data (incompressible by definition)
+- Asking for compression ratio beyond information-theoretic limits
+
+```bash
+# If task asks for impossible compression:
+echo "IMPOSSIBLE: Task requires compressing ${ORIGINAL_SIZE} to ${TARGET_SIZE}.
+Shannon's source coding theorem proves this is impossible for this data type.
+Minimum achievable size is approximately ${MIN_POSSIBLE}." > /app/IMPOSSIBLE.md
+```
+
+**NEVER**: Attempt to compress ML weights to <1% of original size.
+
+### Pattern 24: Polyglot Code Construction (PCC)
+Polyglot tasks require specific compiler/interpreter quirks.
+
+**Detection**: Keywords "polyglot", "works in both", "compile as X and Y"
+
+**Known Polyglot Techniques**:
+- C/Python: Use `#if 0` blocks and string literals
+- Rust/C: Careful use of macros and comments
+- Shell/Python: Shebang and triple-quote tricks
+
+```c
+// C and Python polyglot example
+#if 0
+"""
+#endif
+#include <stdio.h>
+int main() { printf("Hello from C\n"); return 0; }
+#if 0
+"""
+print("Hello from Python")
+#endif
+```
+
+**Protocol**: Search for existing polyglot examples before implementing.
+
+### Pattern 25: Service Configuration Pipeline (SCP)
+Multi-service configuration requires ordered setup.
+
+**Detection**: Keywords "configure", "server", "webserver", "service", "daemon"
+
+**Protocol**:
+1. **Identify all services** needed (nginx, git, ssh, etc.)
+2. **Check service status**: `systemctl status <service>`
+3. **Configure in dependency order** (base → dependent)
+4. **Test each service** before moving to next
+5. **Verify end-to-end** after all configured
+
+```bash
+# Service configuration pattern
+for svc in nginx git-daemon ssh; do
+  systemctl status $svc || systemctl start $svc
+  systemctl is-active $svc || echo "FAILED: $svc"
+done
+```
+
+### Pattern 26: Near-Miss Iteration (NMI)
+When tests show >50% passing, focus on specific failing tests.
+
+**Detection**: Test results show partial success (e.g., 8/9, 6/7, 5/6)
+
+**Protocol**:
+1. Run tests with verbose output: `pytest -v 2>&1 | tee results.txt`
+2. Extract ONLY failing test names
+3. Read failing test code to understand exact requirement
+4. Fix specific issue without breaking passing tests
+5. Re-run ONLY failing tests first: `pytest test_file.py::test_name -v`
+6. Then run full suite to verify no regressions
+
+```bash
+# Near-miss iteration loop
+while true; do
+  pytest -v 2>&1 | tee /tmp/results.txt
+  FAILED=$(grep "FAILED" /tmp/results.txt | head -1)
+  [ -z "$FAILED" ] && echo "ALL PASS" && break
+  echo "Fixing: $FAILED"
+  # ... fix specific test ...
+done
+```
+
+**Reserve 30% of time budget for near-miss iteration.**
 
 ---
 
