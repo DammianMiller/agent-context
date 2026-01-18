@@ -1,9 +1,22 @@
 """
-UAM-Integrated Agent for Harbor/Terminal-Bench (v1.5.0)
+UAM-Integrated Agent for Harbor/Terminal-Bench (v1.7.0)
 
 This agent extends the standard ClaudeCode agent by prepending UAM patterns
 to the task instruction. Since Terminal-Bench doesn't read CLAUDE.md,
 we inject patterns directly into the prompt.
+
+v1.7.0 Changes:
+- Added MANDATORY "RUN TESTS NOW" block (BLOCK 3)
+- Explicit pytest discovery paths (/tests/, ../tests/, current dir)
+- Failure iteration loop guidance
+- Common failure fixes for buffer overflow, file paths, round-trip
+
+v1.6.0 Changes:
+- Added COMMON FAILURE FIXES section with specific error patterns
+- Buffer overflow detection and fix guidance
+- File path/permission error handling
+- Round-trip verification for compression tasks
+- R/Python statistical function debugging
 
 v1.5.0 Changes:
 - STRONGER ENFORCEMENT: Mandatory printed checklists at each step
@@ -128,7 +141,25 @@ curl -v http://localhost:8080/ 2>&1 | head -20
 # If no response: debug and fix BEFORE continuing
 ```
 
-### 🔴 BLOCK 3: PRE-COMPLETION CHECKLIST (PRINT BEFORE "DONE")
+### 🔴 BLOCK 3: RUN TESTS NOW (MANDATORY)
+**BEFORE saying done, you MUST run tests:**
+```bash
+# Find and run tests - try in order:
+pytest /tests/ -v 2>&1 | tee /tmp/results.txt || \
+pytest ../tests/ -v 2>&1 | tee /tmp/results.txt || \
+pytest -v 2>&1 | tee /tmp/results.txt
+
+# Check results
+cat /tmp/results.txt | tail -20
+```
+
+**If tests fail:**
+1. READ the error message carefully
+2. FIX the specific issue
+3. RE-RUN tests
+4. REPEAT until 100% pass
+
+### 🔴 BLOCK 4: PRE-COMPLETION CHECKLIST (PRINT BEFORE "DONE")
 ```
 ╔══════════════════════════════════════════════════════════════╗
 ║              PRE-COMPLETION CHECKLIST v10.8                   ║
@@ -158,7 +189,7 @@ curl -v http://localhost:8080/ 2>&1 | head -20
 ### ITERATION PROTOCOL (P26)
 If tests show partial success (some passing, some failing):
 ```bash
-# 1. Run tests
+# 1. Run tests with FULL output
 pytest -v 2>&1 | tee /tmp/results.txt
 
 # 2. Count results
@@ -166,15 +197,42 @@ PASSED=$(grep -c "PASSED" /tmp/results.txt || echo 0)
 FAILED=$(grep -c "FAILED" /tmp/results.txt || echo 0)
 echo "Status: $PASSED passed, $FAILED failed"
 
-# 3. If >50% passing, iterate:
-# - Read the failing test code
-# - Understand exact requirement
-# - Fix ONLY that issue
-# - Re-run tests
-# - Repeat until 100%
+# 3. If ANY tests failing, READ THE ACTUAL ERROR:
+grep -A30 "FAILED\\|AssertionError\\|Error:" /tmp/results.txt
+
+# 4. FIX the specific issue shown in the error
+# 5. Re-run tests
+# 6. Repeat until 100%
 ```
 
-**Reserve 30% of time for iteration. Don't give up after first attempt.**
+### COMMON FAILURE FIXES (Apply When Errors Match)
+
+**"stack smashing detected" / Buffer Overflow**:
+- Your C/C++ code has buffer overflow
+- Increase buffer sizes: `char buf[1024]` → `char buf[65536]`
+- Use bounds checking: `if (i < sizeof(buf)) buf[i] = c;`
+
+**"Cannot load image" / File Read Errors**:
+- Check file path is correct: `ls -la /app/*.png`
+- Use absolute paths in code
+- Verify file permissions: `chmod 644 /app/image.png`
+
+**"Expected X but got Y" (Wrong Output Value)**:
+- Read the test to understand expected format
+- Check your logic/calculation
+- Verify input file is being read correctly
+
+**"Decompression failed" / Round-Trip Broken**:
+- Your compress/decompress doesn't match
+- Test locally: `./compress < input | ./decompress | diff - input`
+- Fix encoding/decoding logic
+
+**R/Python Statistical Errors**:
+- Check function signature matches what tests expect
+- Verify return type (vector vs scalar)
+- Handle edge cases (empty input, invalid range)
+
+**Reserve 30% of time for iteration. NEVER give up after first test failure.**
 
 ---
 
@@ -184,7 +242,7 @@ echo "Status: $PASSED passed, $FAILED failed"
 
 
 class UAMAgent(ClaudeCode):
-    """UAM Agent v1.5.0 - ClaudeCode with UAM v10.8 strict enforcement patterns."""
+    """UAM Agent v1.7.0 - ClaudeCode with mandatory test running + failure iteration."""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
