@@ -1,7 +1,16 @@
 <!--
-  CLAUDE.md Universal Template - v10.8
+  CLAUDE.md Universal Template - v10.9
   
   CHANGES IN THIS VERSION:
+  - Added Execution Patterns (P32-P36) from deep Terminal-Bench failure analysis
+  - Pattern 32: CLI Execution Verification (CEV) - test exactly as verifier runs
+  - Pattern 33: Numerical Stability Testing (NST) - multiple seeds, edge cases
+  - Pattern 34: Image-to-Structured Pipeline (ISP) - use tools, not reasoning
+  - Pattern 35: Decoder-First Analysis (DFA) - understand decoder before encoder
+  - Pattern 36: Competition Domain Research (CDR) - research before implementing
+  - Now 36 total patterns covering comprehensive failure modes
+  
+  PREVIOUS (v10.8):
   - STRONGER ENFORCEMENT: Mandatory printed checklists at each step
   - HARD STOPS: Cannot proceed without printing verification blocks
   - EXPLICIT CHECKBOXES: Force agent to confirm each action taken
@@ -705,6 +714,134 @@ python compress.py /tmp/original.txt /tmp/compressed.bin
 python decompress.py /tmp/compressed.bin /tmp/recovered.txt
 diff /tmp/original.txt /tmp/recovered.txt && echo "PASS" || echo "FAIL: round-trip broken"
 ```
+
+### Pattern 32: CLI Execution Verification (CEV)
+When creating executable CLI tools, verify execution method matches tests.
+
+**Detection**: Tasks requiring executable scripts, CLI tools, command-line interfaces
+
+**Protocol**:
+1. Add proper shebang: `#!/usr/bin/env python3` (or appropriate interpreter)
+2. Make executable: `chmod +x <script>`
+3. **Test EXACTLY as verifier will run it**: `./tool args` not `python3 tool args`
+4. Verify output format matches expected format
+
+```bash
+# CLI verification pattern
+cat << 'EOF' > /app/cli_tool
+#!/usr/bin/env python3
+import sys
+# ... implementation
+print(result)
+EOF
+chmod +x /app/cli_tool
+# Test exactly as verifier runs it
+./app/cli_tool input.txt  # NOT: python3 /app/cli_tool input.txt
+```
+
+**Common mistake**: Script works with `python3 script.py` but fails with `./script.py` (missing shebang/chmod)
+
+### Pattern 33: Numerical Stability Testing (NST)
+Numerical algorithms require robustness against edge cases.
+
+**Detection**: Statistical sampling, numerical optimization, floating-point computation
+
+**Protocol**:
+1. Test with multiple random seeds (3+ iterations, not just one)
+2. Test domain boundaries explicitly (0, near-zero, infinity)
+3. Use adaptive step sizes for derivative computation
+4. Add tolerance margins for floating-point comparisons (1e-6 typical)
+5. Handle edge cases: empty input, single element, maximum values
+
+```python
+# Numerical robustness pattern
+import numpy as np
+np.random.seed(42)  # Reproducible
+for seed in [42, 123, 456]:  # Multiple seeds
+    np.random.seed(seed)
+    result = algorithm(data)
+    assert np.isclose(result, expected, rtol=1e-5), f"Failed with seed {seed}"
+```
+
+**Transferable to**: Monte Carlo, optimization, signal processing, ML training
+
+### Pattern 34: Image-to-Structured Pipeline (ISP)
+Visual data requires dedicated recognition tools, not reasoning.
+
+**Detection**: Tasks involving image analysis, diagram parsing, visual data extraction
+
+**Protocol**:
+1. **NEVER rely on visual reasoning alone** - accuracy is unreliable
+2. Search for existing recognition libraries:
+   - Chess: `chessimg2pos`, `fenify`, `board_to_fen` (Python)
+   - OCR: `tesseract`, `easyocr`, `paddleocr`
+   - Diagrams: `diagram-parser`, OpenCV + Hough transforms
+3. Verify extracted structured data before using
+4. If no tools available, clearly state the limitation
+
+```bash
+# Image-to-structured pipeline
+pip install board_to_fen
+# OR use tesseract for text
+tesseract image.png output -l eng
+# Verify extracted data
+python -c "import board_to_fen; fen = board_to_fen.predict('chess.png'); print(fen)"
+```
+
+**Transferable to**: Medical imaging (DICOM), satellite imagery, document processing
+
+### Pattern 35: Decoder-First Analysis (DFA)
+For encode/compress tasks with provided decoder, analyze decoder FIRST.
+
+**Detection**: Task provides a decoder/decompressor and asks to create encoder/compressor
+
+**Protocol**:
+1. **Read and understand the provided decoder** before writing encoder
+2. Identify expected input format from decoder source
+3. Create minimal test case matching decoder's expected format
+4. Test round-trip with decoder BEFORE optimizing for size
+5. If decoder crashes, your format is wrong - don't optimize further
+
+```bash
+# Decoder-first analysis
+# Step 1: Understand decoder
+cat /app/decomp.c | grep -A 10 "read\|fread\|getchar"  # Find input parsing
+
+# Step 2: Create minimal test matching decoder format
+echo -n "minimal format" > /tmp/test.comp
+
+# Step 3: Test with decoder FIRST
+cat /tmp/test.comp | ./decomp
+# If segfault: format is wrong, analyze more
+```
+
+**Transferable to**: Protocol implementation, serialization, codec development
+
+### Pattern 36: Competition Domain Research (CDR)
+Competitive tasks benefit from researching domain-specific winning strategies.
+
+**Detection**: Keywords "win rate", "beat", "competition", "versus", "tournament"
+
+**Protocol**:
+1. **Research domain strategies BEFORE implementing**:
+   - CoreWars: Paper beats Stone, Imps tie, Scanners vary
+   - Chess: Opening books, endgame tablebases
+   - Code golf: Known shortest solutions
+2. Time-box implementation iterations: stop at 70% time budget
+3. Track progress per iteration to identify improvement trajectory
+4. If not meeting threshold, document best achieved + gap
+
+```
+# CoreWars strategy research
+# Stone bomber: Drops DAT bombs at regular intervals
+# Paper warrior: Self-replicates faster than stone bombs
+# Imp: MOV 0, 2667 - ties but rarely wins
+# Vampire: JMP traps that capture processes
+
+# Strategy: Paper beats stone, combine with imp for backup
+```
+
+**Transferable to**: Game AI, algorithm competitions, optimization challenges
 
 ---
 
