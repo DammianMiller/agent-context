@@ -11,20 +11,24 @@ trigger: /balls
 ## When to Use
 
 **INVOKE THIS SKILL WHEN:**
-- Making architectural decisions
+- Making architectural decisions BEFORE starting implementation
 - Debugging complex issues after first attempt failed
 - Task has multiple independent sub-questions
 - Need to identify weakest assumption before investing time
 - Security analysis requiring attack vector enumeration
-- Format/protocol compliance verification
+- Format/protocol compliance verification (compress/decompress, encode/decode)
 
 **DO NOT USE WHEN:**
 - Simple factual tasks ("install X", "create file Y")
 - Impossible tasks (use P5/P19 instead)
-- Pure optimization/iteration tasks
+- **DURING optimization/iteration loops** - just iterate, don't analyze
 - Pre-computed solutions exist (search first)
 - Time-critical tasks (adds ~500 tokens overhead)
 - Near-miss tasks (8/9 passing) - problem is specific
+
+**CRITICAL: Use balls-mode for PRE-ANALYSIS only, not during iteration!**
+- GOOD: Use balls-mode to identify what to test BEFORE implementing
+- BAD: Use balls-mode to analyze each iteration attempt
 
 ---
 
@@ -187,6 +191,38 @@ Balls-mode complements existing UAM patterns:
    - "Unknowable" (need external info) → Ask user
 5. **For trivial questions** - just answer, don't over-engineer
 6. **Address weakest link FIRST** - highest ROI for confidence improvement
+7. **EMPIRICAL TESTING beats theoretical knowledge** - if you can test, TEST FIRST
+8. **Don't trust provided advice blindly** - verify claims with actual tests
+
+---
+
+## Example: Optimization Task (CoreWars - when NOT to use balls-mode)
+
+**WRONG approach** (balls-mode during iteration):
+```
+/balls My warrior only gets 27% vs stone, what should I change?
+[Analysis of strategy options...]
+[More analysis...]
+[Time wasted on theory instead of testing]
+```
+
+**RIGHT approach** (empirical first, balls-mode only for pre-analysis):
+```
+# Step 1: TEST what actually works (no balls-mode needed)
+for opp in stone; do
+  for w in warriors/*.red; do
+    pmars -b -r 100 -f warriors/$opp.red $w | tail -1
+  done
+done
+# Output: snake.red gets 93% wins vs stone!
+
+# Step 2: Study snake.red, adapt its strategy
+cat warriors/snake.red  # Learn from what works
+
+# Step 3: Iterate on implementation (no balls-mode, just test-fix cycles)
+```
+
+**Key lesson**: For optimization tasks, empirical testing > theoretical analysis.
 
 ---
 

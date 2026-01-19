@@ -450,21 +450,39 @@ fi''',
             '''cat > /tmp/corewars_strategies.txt << 'STRATEGY'
 === COREWARS WINNING STRATEGIES ===
 
-PAPER beats STONE (self-replication faster than bombing)
-IMP ties but rarely wins (defensive, avoids DAT bombs)
-VAMPIRE captures processes (JMP traps)
-SCANNER detects and targets opponent code
+CRITICAL: Do NOT assume "paper beats stone" - TEST FIRST!
+The provided warriors have specific weaknesses. Follow this protocol:
 
-RECOMMENDED APPROACH for Stone opponent:
-1. Use Paper-style self-replication
-2. Combine with Imp backup for ties
-3. Add bomber component against non-stone
+STEP 1: EMPIRICALLY TEST what beats each opponent
+Run this BEFORE implementing your warrior:
+```bash
+for opp in stone vampire paper snake g2-clear; do
+  for w in warriors/*.red; do
+    echo -n "$(basename $w) vs $opp: "
+    pmars -b -r 100 -f warriors/$opp.red $w 2>/dev/null | tail -1
+  done
+done
+```
 
-PAPER EXAMPLE:
-    spl 0, 0
-    mov -1, @0
-    add #100, -1
-    jmz -2, @-2
+STEP 2: Identify highest win rate against STONE (hardest opponent)
+- Look for warriors that get 70%+ wins against stone
+- The provided snake.red often beats stone well
+- Analyze that warrior's strategy and COPY IT
+
+STEP 3: Build a HYBRID using proven strategies
+- Start with what beats stone
+- Test it against other opponents
+- Iterate until all thresholds are met
+
+COMMON STRATEGIES:
+- IMP: mov 0, 2667 (ties frequently, defensive)
+- PAPER: spl + mov (replicates, good vs bombers)
+- STONE: dat bombs at intervals (kills single-thread)
+- SCANNER: seq to find enemy, then bomb
+- PITBOMBER: like snake - combined replication + bombing
+
+KEY INSIGHT: The provided warriors are your RESEARCH LIBRARY.
+Test them against each other to find what works.
 STRATEGY
 echo "Strategy guide saved to /tmp/corewars_strategies.txt"''',
         ],
@@ -621,8 +639,21 @@ Strategy resources prepared:
 - /tmp/opponent_analysis.txt: Analysis of provided opponent warriors
 - /tmp/corewars_strategies.txt: Winning strategy guide
 
-**KEY INSIGHT**: Paper beats Stone! Use self-replication strategy.
-Read /tmp/corewars_strategies.txt for specific tactics.''',
+**CRITICAL FIRST STEP**: Do NOT assume strategies work - TEST THEM!
+Run this command FIRST to see what beats each opponent:
+```bash
+for opp in stone vampire paper snake g2-clear; do
+  echo "=== Testing against $opp ==="
+  for w in warriors/*.red; do
+    result=$(pmars -b -r 100 -f warriors/$opp.red $w 2>/dev/null | tail -1)
+    wins=$(echo $result | awk '{print $2}')
+    echo "$(basename $w): $wins wins"
+  done
+done
+```
+
+Then study the warrior with highest wins against STONE and adapt its strategy.
+Read /tmp/corewars_strategies.txt for the protocol.''',
     }
     
     return contexts.get(task_name, '')
