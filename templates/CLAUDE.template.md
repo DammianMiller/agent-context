@@ -1,7 +1,13 @@
 <!--
-  CLAUDE.md Universal Template - v10.11
+  CLAUDE.md Universal Template - v10.12
   
   CHANGES IN THIS VERSION:
+  - SECRETS CLARIFICATION: All secrets in GitHub, secret-dependent ops MUST use pipelines
+  - Ephemeral pipelines for one-time secret operations (self-destruct after run)
+  - Local testing limited to non-secret operations (read-only kubectl, cloud console)
+  - Clear pipeline routing table for secret-dependent operations
+  
+  PREVIOUS (v10.11):
   - INFRASTRUCTURE POLICY UPDATE: Local testing now ALLOWED for proving solutions
   - IaC parity MANDATORY before completion (test locally, then codify in IaC)
   - Two-phase workflow: Phase 1 (local proof) → Phase 2 (IaC parity verification)
@@ -209,24 +215,38 @@ Under what conditions does this work?
 
 **Local testing is ALLOWED for proving solutions. IaC parity is MANDATORY before completion.**
 
+### Critical: Secrets Are in GitHub
+
+**ALL secrets are stored in GitHub Actions secrets.** Operations requiring secrets MUST use pipelines:
+
+| If operation needs... | Use this pipeline |
+|-----------------------|-------------------|
+| Terraform with secrets | `iac-terraform-cicd.yml` or `ops-ephemeral-terraform.yml` |
+| kubectl with secrets | `ops-approved-operations.yml` |
+| One-time secret operation | `ops-create-ephemeral.yml` (self-destructs after run) |
+
+**Local commands without secrets** (read-only, public resources) are allowed for testing.
+
 ### Two-Phase Infrastructure Workflow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  PHASE 1: LOCAL PROOF (ALLOWED)                                 │
+│  PHASE 1: LOCAL PROOF (ALLOWED - NO SECRETS)                    │
 │  ─────────────────────────────────────────────────────────────  │
-│  ✓ kubectl apply/delete/patch to TEST solution                  │
-│  ✓ terraform plan/apply in dev/ephemeral environments           │
+│  ✓ kubectl get/describe/logs (read-only operations)             │
+│  ✓ terraform plan (uses GitHub pipeline for secrets)            │
 │  ✓ Direct cloud console changes for rapid prototyping           │
-│  ✓ Manual commands to verify behavior                           │
+│  ✓ Manual commands to verify behavior (public resources)        │
+│                                                                  │
+│  ⚠️  SECRETS REQUIRED? → Use pipeline, not local commands       │
 │                                                                  │
 │  PURPOSE: Prove the solution works before codifying             │
 ├─────────────────────────────────────────────────────────────────┤
-│  PHASE 2: IaC PARITY (MANDATORY)                                │
+│  PHASE 2: IaC PARITY (MANDATORY - VIA PIPELINE)                 │
 │  ─────────────────────────────────────────────────────────────  │
 │  ☐ Translate ALL manual changes to Terraform/Kubernetes YAML    │
 │  ☐ Commit IaC changes to feature branch                         │
-│  ☐ Run `terraform plan` to verify parity                        │
+│  ☐ Run `terraform plan` via pipeline (has secrets)              │
 │  ☐ Deploy via pipeline to confirm 100% match                    │
 │  ☐ Delete any manual/ephemeral resources                        │
 │                                                                  │
@@ -240,6 +260,29 @@ Under what conditions does this work?
 Local testing proves the solution. IaC ensures reproducibility.
 Manual changes are TEMPORARY. IaC changes are PERMANENT.
 If it's not in IaC, it doesn't exist (will be destroyed/lost).
+Secrets live in GitHub - use pipelines for secret-dependent operations.
+```
+
+### Approved Pipelines
+
+| Task | Pipeline | Trigger | Notes |
+|------|----------|---------|-------|
+| Kubernetes operations | `ops-approved-operations.yml` | Manual dispatch | Has cluster secrets |
+| Ephemeral environments | `ops-create-ephemeral.yml` | Manual dispatch | Self-destructs after run |
+| Terraform changes | `iac-terraform-cicd.yml` | PR to main | Has TF secrets |
+| Ephemeral Terraform | `ops-ephemeral-terraform.yml` | Manual dispatch | One-time TF operations |
+
+### Using Ephemeral Pipelines for One-Time Operations
+
+For operations that need secrets but are one-time (migrations, testing, data fixes):
+
+```bash
+# Create ephemeral pipeline that self-destructs after completion
+gh workflow run ops-create-ephemeral.yml \
+  -f operation_name="test-new-config" \
+  -f commands="terraform apply -target=module.new_feature"
+  
+# Pipeline runs with secrets, then self-removes
 ```
 
 ### Parity Verification Checklist
@@ -247,51 +290,42 @@ If it's not in IaC, it doesn't exist (will be destroyed/lost).
 Before marking infrastructure work complete:
 
 ```bash
-# 1. Capture current state (after manual testing)
+# 1. Capture current state (after testing via pipeline)
 kubectl get all -n <namespace> -o yaml > /tmp/current-state.yaml
-terraform state pull > /tmp/current-tf-state.json
 
-# 2. Destroy manual changes
-kubectl delete -f /tmp/manual-test.yaml
-# OR for terraform: terraform destroy -target=<resource>
+# 2. Destroy test resources (via pipeline if secrets needed)
+gh workflow run ops-approved-operations.yml \
+  -f operation="delete" \
+  -f target="test-resources"
 
-# 3. Apply ONLY from IaC
-terraform apply  # via pipeline
-kubectl apply -k ./manifests/  # via ArgoCD/pipeline
+# 3. Apply ONLY from IaC (via pipeline - has secrets)
+# Push IaC changes → PR → iac-terraform-cicd.yml runs automatically
 
 # 4. Verify parity - must produce IDENTICAL state
 kubectl get all -n <namespace> -o yaml > /tmp/iac-state.yaml
 diff /tmp/current-state.yaml /tmp/iac-state.yaml  # Should be empty
 ```
 
-### Approved Pipelines (for final deployment)
-
-| Task | Pipeline | Trigger |
-|------|----------|---------|
-| Kubernetes operations | `ops-approved-operations.yml` | Manual dispatch |
-| Ephemeral environments | `ops-create-ephemeral.yml` | Manual dispatch |
-| Terraform changes | `iac-terraform-cicd.yml` | PR to main |
-| Ephemeral Terraform | `ops-ephemeral-terraform.yml` | Manual dispatch |
-
 ### What This Means for Agents
 
-**PHASE 1 - Local Testing (ALLOWED):**
-- ✓ Run `kubectl apply/delete/patch` to test solutions
-- ✓ Run `terraform apply` in dev/ephemeral environments
+**PHASE 1 - Local Testing (ALLOWED for non-secret operations):**
+- ✓ Run read-only commands: `kubectl get`, `kubectl describe`, `kubectl logs`
+- ✓ Run `terraform plan` via pipeline (needs secrets)
 - ✓ Make cloud console changes to prototype
-- ✓ Use any tools needed to prove the solution works
+- ✓ Use ephemeral pipelines for secret-dependent testing
 
-**PHASE 2 - IaC Parity (MANDATORY before completion):**
+**PHASE 2 - IaC Parity (MANDATORY - always via pipeline):**
 - ☐ ALL manual changes MUST be translated to IaC (Terraform/K8s YAML)
 - ☐ IaC MUST be committed to version control
-- ☐ Deployment MUST go through CI/CD pipeline
+- ☐ Deployment MUST go through CI/CD pipeline (has secrets)
 - ☐ Final state MUST match IaC exactly (verify with diff)
 - ☐ Manual/ephemeral resources MUST be cleaned up
 
-**NEVER (even in Phase 1):**
-- Create production secrets via `kubectl create secret` (use Sealed Secrets)
-- Make changes to production without IaC parity plan
-- Leave manual changes undocumented in IaC
+**NEVER:**
+- Run `terraform apply` locally (no secrets available)
+- Run `kubectl apply` with secret-dependent resources locally
+- Create secrets via `kubectl create secret` (use Sealed Secrets)
+- Hardcode or expose secrets in code/logs
 
 📖 See: `docs/adr/ADR-0006-pipeline-only-infrastructure-changes.md`
 
