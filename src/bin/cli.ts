@@ -15,6 +15,7 @@ import { coordCommand } from '../cli/coord.js';
 import { agentCommand } from '../cli/agent.js';
 import { deployCommand } from '../cli/deploy.js';
 import { taskCommand } from '../cli/task.js';
+import { registerModelCommands } from '../cli/model.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -442,5 +443,8 @@ program
     const { updateCommand } = await import('../cli/update.js');
     await updateCommand(options);
   });
+
+// Multi-Model Architecture commands
+registerModelCommands(program);
 
 program.parse();

@@ -4,6 +4,37 @@ export { generateClaudeMd } from './generators/claude-md.js';
 export * from './coordination/index.js';
 export * from './tasks/index.js';
 
+// Multi-Model Architecture (explicit exports to avoid conflicts with types)
+export {
+  ModelRouter,
+  createRouter,
+  createCostOptimizedRouter,
+  createPerformanceRouter,
+  TaskPlanner,
+  createPlanner,
+  TaskExecutor,
+  createExecutor,
+  MockModelClient,
+  ModelPresets,
+  DEFAULT_ROUTING_RULES,
+} from './models/index.js';
+export type {
+  ModelConfig as MultiModelModelConfig,
+  MultiModelConfig,
+  ModelRole,
+  TaskComplexity,
+  TaskClassificationResult,
+  ExecutionPlan,
+  Subtask,
+  ExecutionResult,
+  ModelSelection,
+  RoutingRule as MultiModelRoutingRule,
+  PlannerOptions,
+  ModelClient,
+  ExecutionContext,
+  ExecutorOptions,
+} from './models/index.js';
+
 // Memory system exports
 export { getEmbeddingService, generateEmbedding, generateEmbeddings } from './memory/embeddings.js';
 export { classifyTask, extractTaskEntities, getSuggestedMemoryQueries } from './memory/task-classifier.js';

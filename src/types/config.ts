@@ -181,6 +181,89 @@ export const TimeOptimizationSchema = z.object({
   }).optional(),
 });
 
+/**
+ * Model configuration for multi-model architecture
+ */
+export const ModelConfigSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  provider: z.enum(['anthropic', 'deepseek', 'openai', 'zhipu', 'ollama', 'custom']),
+  apiModel: z.string(),
+  endpoint: z.string().optional(),
+  apiKeyEnvVar: z.string().optional(),
+  maxContextTokens: z.number().default(128000),
+  costPer1MInput: z.number().optional(),
+  costPer1MOutput: z.number().optional(),
+  capabilities: z.array(z.string()).default([]),
+});
+
+/**
+ * Routing rule for task-to-model mapping
+ */
+export const RoutingRuleSchema = z.object({
+  complexity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  keywords: z.array(z.string()).optional(),
+  taskType: z.enum(['planning', 'coding', 'refactoring', 'bug-fix', 'review', 'documentation']).optional(),
+  targetRole: z.enum(['planner', 'executor', 'reviewer', 'fallback']),
+  priority: z.number().default(0),
+});
+
+/**
+ * NEW: Multi-Model Architecture configuration.
+ * Enables two-tier agentic architecture with separate planner and executor models.
+ */
+export const MultiModelSchema = z.object({
+  enabled: z.boolean().default(false),
+  
+  // Model definitions (can use preset IDs or custom configs)
+  // Preset IDs: 'opus-4.5', 'deepseek-v3.2', 'deepseek-v3.2-exp', 'glm-4.7', 'gpt-5.2'
+  models: z.array(z.union([
+    z.string(),
+    ModelConfigSchema,
+  ])).default(['opus-4.5']),
+  
+  // Role assignments - which model handles which role
+  roles: z.object({
+    planner: z.string().default('opus-4.5'),
+    executor: z.string().default('glm-4.7'),
+    reviewer: z.string().optional(),
+    fallback: z.string().default('opus-4.5'),
+  }).optional(),
+  
+  // Custom routing rules (optional - uses defaults if not specified)
+  routing: z.array(RoutingRuleSchema).optional(),
+  
+  // Routing strategy
+  routingStrategy: z.enum([
+    'cost-optimized',     // Minimize cost, use cheapest capable model
+    'performance-first', // Maximize quality, use best model
+    'balanced',          // Balance cost and performance
+    'adaptive',          // Learn from task results
+  ]).default('balanced'),
+  
+  // Cost optimization settings
+  costOptimization: z.object({
+    enabled: z.boolean().default(true),
+    targetReduction: z.number().default(90),
+    maxPerformanceDegradation: z.number().default(20),
+    fallbackThreshold: z.number().default(3),
+  }).optional(),
+  
+  // Planner-specific settings
+  plannerSettings: z.object({
+    complexityThreshold: z.enum(['low', 'medium', 'high']).default('medium'),
+    maxPlanningTokens: z.number().default(10000),
+    enableDecomposition: z.boolean().default(true),
+  }).optional(),
+  
+  // Executor settings
+  executorSettings: z.object({
+    retryWithFallback: z.boolean().default(true),
+    maxRetries: z.number().default(2),
+    stepTimeout: z.number().default(120000),
+  }).optional(),
+});
+
 export const AgentContextConfigSchema = z.object({
   $schema: z.string().optional(),
   version: z.string().default('1.0.0'),
@@ -201,9 +284,12 @@ export const AgentContextConfigSchema = z.object({
   // NEW: Optimization settings
   costOptimization: CostOptimizationSchema.optional(),
   timeOptimization: TimeOptimizationSchema.optional(),
+  // NEW: Multi-model architecture settings
+  multiModel: MultiModelSchema.optional(),
 });
 
 export type AgentContextConfig = z.infer<typeof AgentContextConfigSchema>;
+export type MultiModelConfig = z.infer<typeof MultiModelSchema>;
 export type Platform = 'claudeCode' | 'factory' | 'vscode' | 'opencode' | 'claudeWeb' | 'factoryWeb';
 export type Droid = z.infer<typeof DroidSchema>;
 export type Command = z.infer<typeof CommandSchema>;
