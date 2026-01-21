@@ -16,6 +16,7 @@ import { agentCommand } from '../cli/agent.js';
 import { deployCommand } from '../cli/deploy.js';
 import { taskCommand } from '../cli/task.js';
 import { registerModelCommands } from '../cli/model.js';
+import { mcpRouterCommand } from '../cli/mcp-router.js';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -446,5 +447,43 @@ program
 
 // Multi-Model Architecture commands
 registerModelCommands(program);
+
+// MCP Router - Lightweight hierarchical router for 98%+ token reduction
+program
+  .command('mcp-router')
+  .description('MCP Router - hierarchical router for 98%+ token reduction')
+  .addCommand(
+    new Command('start')
+      .description('Start the MCP router as a stdio server')
+      .option('-c, --config <path>', 'Path to mcp.json config file')
+      .option('-v, --verbose', 'Enable verbose logging')
+      .action((options) => mcpRouterCommand('start', options))
+  )
+  .addCommand(
+    new Command('stats')
+      .description('Show router statistics (servers, tools, token savings)')
+      .option('-c, --config <path>', 'Path to mcp.json config file')
+      .option('-v, --verbose', 'Enable verbose logging')
+      .option('--json', 'Output as JSON')
+      .action((options) => mcpRouterCommand('stats', options))
+  )
+  .addCommand(
+    new Command('discover')
+      .description('Discover tools matching a query')
+      .option('-q, --query <query>', 'Search query (required)')
+      .option('-s, --server <server>', 'Filter to specific server')
+      .option('-l, --limit <limit>', 'Max results', '10')
+      .option('-c, --config <path>', 'Path to mcp.json config file')
+      .option('-v, --verbose', 'Enable verbose logging')
+      .option('--json', 'Output as JSON')
+      .action((options) => mcpRouterCommand('discover', options))
+  )
+  .addCommand(
+    new Command('list')
+      .description('List configured MCP servers')
+      .option('-c, --config <path>', 'Path to mcp.json config file')
+      .option('--json', 'Output as JSON')
+      .action((options) => mcpRouterCommand('list', options))
+  );
 
 program.parse();

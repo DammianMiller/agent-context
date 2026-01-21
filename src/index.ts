@@ -105,3 +105,32 @@ export type {
 
 // Entropy-aware compression
 export { calculateEntropy, calculateInformationDensity } from './memory/semantic-compression.js';
+
+// MCP Router - Lightweight hierarchical router for 98%+ token reduction
+export {
+  McpRouter,
+  runStdioServer,
+  loadConfigFromPaths,
+  loadConfigFromFile,
+  mergeConfigs,
+  ToolSearchIndex,
+  McpClient,
+  McpClientPool,
+  DISCOVER_TOOLS_DEFINITION,
+  EXECUTE_TOOL_DEFINITION,
+  handleDiscoverTools,
+  handleExecuteTool,
+  estimateDiscoverToolsTokens,
+  estimateExecuteToolTokens,
+} from './mcp-router/index.js';
+export type {
+  McpConfig,
+  McpServerConfig,
+  ToolDefinition,
+  ToolSearchResult,
+  DiscoverToolsArgs,
+  ExecuteToolArgs,
+  ToolRegistry,
+  RouterStats,
+  RouterOptions,
+} from './mcp-router/index.js';
