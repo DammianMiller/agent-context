@@ -1086,6 +1086,58 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
+## 🔌 MCP ROUTER - TOKEN-EFFICIENT TOOL ACCESS
+
+**When you have access to many MCP tools (50+), use the MCP Router to reduce context usage by 98%.**
+
+Instead of loading 150+ tool definitions (~75,000 tokens), the router exposes just 2 meta-tools (~700 tokens):
+
+### discover_tools
+Find tools matching a natural language query.
+
+```
+discover_tools({ query: "github issues" })
+→ Returns: [{ path: "github.create_issue", description: "..." }, ...]
+
+discover_tools({ query: "file operations", server: "filesystem" })
+→ Returns tools filtered to specific server
+```
+
+### execute_tool
+Execute a tool by its path (from discover_tools results).
+
+```
+execute_tool({ 
+  path: "github.create_issue", 
+  args: { title: "Bug report", body: "Description..." } 
+})
+```
+
+### Workflow
+
+1. **First**: Use `discover_tools` to find relevant tools
+2. **Then**: Use `execute_tool` with the returned path
+
+### When to Use
+
+- Many MCP servers configured (5+ servers, 50+ tools)
+- Token budget is constrained
+- Need to dynamically discover available tools
+
+### CLI Commands
+
+```bash
+uam mcp-router stats      # Show token savings (traditional vs router)
+uam mcp-router discover --query "search"  # Find tools from CLI
+uam mcp-router list       # Show configured MCP servers
+```
+
+### Configuration
+
+The router auto-loads from: Claude Desktop, Cursor, VS Code, Claude Code (`~/.claude/settings.json`), Factory.AI (`~/.factory/mcp.json`), and local `mcp.json`.
+
+---
+
 ## 📋 MANDATORY DECISION LOOP
 
 ```

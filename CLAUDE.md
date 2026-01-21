@@ -1,7 +1,20 @@
 <!--
-  CLAUDE.md Universal Template - v10.10
+  CLAUDE.md Universal Template - v10.12
   
   CHANGES IN THIS VERSION:
+  - SECRETS CLARIFICATION: All secrets in GitHub, secret-dependent ops MUST use pipelines
+  - Ephemeral pipelines for one-time secret operations (self-destruct after run)
+  - Local testing limited to non-secret operations (read-only kubectl, cloud console)
+  - Clear pipeline routing table for secret-dependent operations
+  
+  PREVIOUS (v10.11):
+  - INFRASTRUCTURE POLICY UPDATE: Local testing now ALLOWED for proving solutions
+  - IaC parity MANDATORY before completion (test locally, then codify in IaC)
+  - Two-phase workflow: Phase 1 (local proof) → Phase 2 (IaC parity verification)
+  - Parity verification checklist with state diff confirmation
+  - Updated completion checklist for infrastructure tasks
+  
+  PREVIOUS (v10.10):
   - PROJECT.md SEPARATION: Project-specific content can now be in .factory/PROJECT.md
   - Seamless template upgrades without merge conflicts
   - Generator auto-detects PROJECT.md and imports as Handlebars partial
@@ -945,6 +958,58 @@ Task(subagent_type: "performance-optimizer", prompt: "Find hotspots in src/cache
 
 ---
 
+## 🔌 MCP ROUTER - TOKEN-EFFICIENT TOOL ACCESS
+
+**When you have access to many MCP tools (50+), use the MCP Router to reduce context usage by 98%.**
+
+Instead of loading 150+ tool definitions (~75,000 tokens), the router exposes just 2 meta-tools (~700 tokens):
+
+### discover_tools
+Find tools matching a natural language query.
+
+```
+discover_tools({ query: "github issues" })
+→ Returns: [{ path: "github.create_issue", description: "..." }, ...]
+
+discover_tools({ query: "file operations", server: "filesystem" })
+→ Returns tools filtered to specific server
+```
+
+### execute_tool
+Execute a tool by its path (from discover_tools results).
+
+```
+execute_tool({ 
+  path: "github.create_issue", 
+  args: { title: "Bug report", body: "Description..." } 
+})
+```
+
+### Workflow
+
+1. **First**: Use `discover_tools` to find relevant tools
+2. **Then**: Use `execute_tool` with the returned path
+
+### When to Use
+
+- Many MCP servers configured (5+ servers, 50+ tools)
+- Token budget is constrained
+- Need to dynamically discover available tools
+
+### CLI Commands
+
+```bash
+uam mcp-router stats      # Show token savings (traditional vs router)
+uam mcp-router discover --query "search"  # Find tools from CLI
+uam mcp-router list       # Show configured MCP servers
+```
+
+### Configuration
+
+The router auto-loads from: Claude Desktop, Cursor, VS Code, Claude Code (`~/.claude/settings.json`), Factory.AI (`~/.factory/mcp.json`), and local `mcp.json`.
+
+---
+
 ## 📋 MANDATORY DECISION LOOP
 
 ```
@@ -1532,7 +1597,7 @@ uam worktree create hotfix-<issue>
 |-----------|-------------|-----------------|---
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (45 changes), package-lock.json (35 changes), templates/CLAUDE.template.md (27 changes), .beads/issues.jsonl (25 changes), CLAUDE.md (15 changes), src/generators/claude-md.ts (12 changes), src/uam_harbor/uam_agent.py (10 changes), README.md (9 changes), src/bin/cli.ts (8 changes), src/cli/init.ts (8 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (53 changes), package-lock.json (40 changes), templates/CLAUDE.template.md (30 changes), .beads/issues.jsonl (28 changes), CLAUDE.md (16 changes), src/generators/claude-md.ts (12 changes), src/bin/cli.ts (10 changes), README.md (10 changes), src/uam_harbor/uam_agent.py (10 changes), src/cli/init.ts (8 changes). These files may need extra attention during changes.
 
 </coding_guidelines>
 
