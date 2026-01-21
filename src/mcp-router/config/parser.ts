@@ -33,6 +33,12 @@ const CONFIG_PATHS = {
     win32: '%USERPROFILE%/.claude/settings.json',
     linux: '~/.claude/settings.json',
   },
+  // Factory.AI Droid
+  factoryAI: {
+    darwin: '~/.factory/mcp.json',
+    win32: '%USERPROFILE%/.factory/mcp.json',
+    linux: '~/.factory/mcp.json',
+  },
 };
 
 function expandPath(p: string): string {
