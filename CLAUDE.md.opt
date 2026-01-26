@@ -1,11 +1,9 @@
-<!-- CLAUDE.md v10.12-opt - Optimized Universal Template -->
+<!-- CLAUDE.md v10.12 - Optimized -->
 <coding_guidelines>
 
-# {{PROJECT_NAME}} - Autonomous Agent Guide
+# UAM - Autonomous Agent Guide
 
-{{#if DESCRIPTION}}
-> {{DESCRIPTION}}
-{{/if}}
+> Universal AI agent memory - CLAUDE.md templates, memory, worktrees
 
 ## DIRECTIVE HIERARCHY
 | Priority | Source | Override |
@@ -27,7 +25,7 @@ Do not claim correctness you haven't verified.
 Do not handle only the happy path.
 ```
 
-**Output:** Assumptions → Code (smaller than expected) → "Handles/Does NOT handle"
+**Output format:** Assumptions → Code (smaller than expected) → "Handles/Does NOT handle"
 
 ---
 
@@ -120,8 +118,10 @@ ACTIVE: [list YES only]
 | 3 | Tests 100% pass | ITERATE |
 
 ```bash
-# Gate 1: for f in $EXPECTED; do [ -f "$f" ] || echo "MISSING: $f"; done
-# Gate 3: {{TEST_COMMAND}}
+# Gate 1
+for f in $EXPECTED_FILES; do [ -f "$f" ] || echo "MISSING: $f"; done
+# Gate 3
+npm test  # or pytest -v
 ```
 
 ---
@@ -129,17 +129,21 @@ ACTIVE: [list YES only]
 ## MEMORY SYSTEM
 
 ```
-L1 Working  │ SQLite memories      │ {{SHORT_TERM_LIMIT}} max │ <1ms
-L2 Session  │ SQLite session_mem   │ current                  │ <5ms
-L3 Semantic │ {{LONG_TERM_BACKEND}}│ search                   │ ~50ms
-L4 Knowledge│ SQLite entities/rels │ graph                    │ <20ms
+L1 Working  │ SQLite memories      │ 50 max  │ <1ms
+L2 Session  │ SQLite session_mem   │ current │ <5ms
+L3 Semantic │ Qdrant vectors       │ search  │ ~50ms
+L4 Knowledge│ SQLite entities/rels │ graph   │ <20ms
 ```
 
 **Commands:**
 ```bash
-sqlite3 {{MEMORY_DB_PATH}} "SELECT * FROM memories ORDER BY id DESC LIMIT 10;"
-{{MEMORY_QUERY_CMD}} "keywords"
-{{MEMORY_STORE_CMD}} "lesson" --importance 8
+# Query
+sqlite3 ./agents/data/memory/short_term.db "SELECT * FROM memories ORDER BY id DESC LIMIT 10;"
+uam memory query "keywords"
+
+# Store
+sqlite3 ./agents/data/memory/short_term.db "INSERT INTO memories (timestamp,type,content) VALUES (datetime('now'),'action','...');"
+uam memory store "lesson" --importance 8
 ```
 
 ---
@@ -149,11 +153,12 @@ sqlite3 {{MEMORY_DB_PATH}} "SELECT * FROM memories ORDER BY id DESC LIMIT 10;"
 **ALL changes use worktrees. NO EXCEPTIONS.**
 
 ```bash
-{{WORKTREE_CREATE_CMD}} <slug>     # Creates {{WORKTREE_DIR}}/NNN-<slug>/
-cd {{WORKTREE_DIR}}/NNN-<slug>/
+uam worktree create <slug>     # Creates .worktrees/NNN-<slug>/
+cd .worktrees/NNN-<slug>/
+# ... work ...
 git add -A && git commit -m "type: description"
-{{WORKTREE_PR_CMD}} <id>           # Creates PR
-{{WORKTREE_CLEANUP_CMD}} <id>      # After merge
+uam worktree pr <id>           # Creates PR
+uam worktree cleanup <id>      # After merge
 ```
 
 ---
@@ -173,8 +178,8 @@ uam agent overlaps --resource "<files>"
 
 **Parallel review before PR:**
 ```bash
-Task(subagent_type: "security-auditor", ...)
-Task(subagent_type: "code-quality-guardian", ...)
+Task(subagent_type: "security-auditor", ...)     # Blocks on CRITICAL
+Task(subagent_type: "code-quality-guardian", ...) # Concurrent
 ```
 
 ---
@@ -186,7 +191,7 @@ Task(subagent_type: "code-quality-guardian", ...)
 1. PROTECT  → cp file file.bak
 2. MEMORY   → query relevant context
 3. AGENTS   → check overlaps
-4. SKILLS   → check {{SKILLS_PATH}}
+4. SKILLS   → check .factory/skills/
 5. WORKTREE → create, work, PR
 6. VERIFY   → gates pass
 ```
@@ -207,112 +212,19 @@ Task(subagent_type: "code-quality-guardian", ...)
 
 ---
 
-{{#if HAS_INFRA}}
-## INFRASTRUCTURE (IaC PARITY REQUIRED)
-
-**Secrets in GitHub → use pipelines for secret-dependent ops.**
-
-| Task | Pipeline |
-|------|----------|
-| Terraform | `iac-terraform-cicd.yml` |
-| kubectl ops | `ops-approved-operations.yml` |
-| One-time | `ops-create-ephemeral.yml` |
-
-**Two-phase:** Local proof (no secrets) → IaC parity (via pipeline)
-
-**PROHIBITED locally:** `terraform apply`, `kubectl apply/delete`, `kubectl create secret`
-
-{{/if}}
----
-
-## COMMANDS
+## PROJECT COMMANDS
 
 ```bash
-{{TEST_COMMAND}}     # Tests
-{{BUILD_COMMAND}}    # Build
-{{LINT_COMMAND}}     # Lint
+npm test        # Vitest
+npm run build   # TypeScript
+npm run lint    # ESLint
 ```
 
-**Paths:** Memory: `{{MEMORY_DB_PATH}}` | Skills: `{{SKILLS_PATH}}` | Droids: `{{DROIDS_PATH}}`
-
----
-
-{{#if HAS_PROJECT_MD}}
-{{> PROJECT}}
-{{else}}
-## REPOSITORY STRUCTURE
-
-```
-{{PROJECT_NAME}}/
-{{{REPOSITORY_STRUCTURE}}}
-```
-
-{{#if ARCHITECTURE_OVERVIEW}}
-## Architecture
-{{{ARCHITECTURE_OVERVIEW}}}
-{{/if}}
-
-{{#if ESSENTIAL_COMMANDS}}
-## Commands
-```bash
-{{{ESSENTIAL_COMMANDS}}}
-```
-{{/if}}
-{{/if}}
-
----
-
-## COMPLETION CHECKLIST
-
-```
-☐ Tests pass
-☐ Lint/typecheck pass
-☐ Worktree used (not {{DEFAULT_BRANCH}})
-☐ Memory updated
-☐ PR created
-☐ Reviews passed
-{{#if HAS_INFRA}}
-☐ IaC parity verified
-{{/if}}
-☐ No secrets in code
-```
-
----
-
-## COMPLETION PROTOCOL
-
-```
-MERGE → DEPLOY → MONITOR → FIX (iterate until 100%)
-
-1. MERGE: PR approved → merge to {{DEFAULT_BRANCH}} → delete branch
-2. DEPLOY: CI/CD runs → check status → confirm live
-3. MONITOR: Check logs → verify functionality → smoke tests
-4. FIX: New worktree → fix → GOTO 1
-5. COMPLETE: Update memory → close tasks
-```
-
-**Never "done" until:** PR merged + deployed + verified working
-
----
-
-{{#if PREPOPULATED_KNOWLEDGE}}
-## PROJECT KNOWLEDGE
-
-{{#if LEARNED_LESSONS}}
-### Lessons
-{{{LEARNED_LESSONS}}}
-{{/if}}
-
-{{#if KNOWN_GOTCHAS}}
-### Gotchas
-{{{KNOWN_GOTCHAS}}}
-{{/if}}
-
-{{#if HOT_SPOTS}}
-### Hot Spots
-{{{HOT_SPOTS}}}
-{{/if}}
-{{/if}}
+**Paths:**
+- Memory: `./agents/data/memory/short_term.db`
+- Skills: `.factory/skills/`
+- Droids: `.factory/droids/`
+- Templates: `templates/CLAUDE.template.md`
 
 ---
 
@@ -329,7 +241,8 @@ MERGE → DEPLOY → MONITOR → FIX (iterate until 100%)
 **P17 Active? Print:**
 ```
 === CONSTRAINTS ===
-☐ constraint1  ☐ constraint2
+☐ constraint1
+☐ constraint2
 ☑ constraint1: PASS/FAIL
 === END ===
 ```
