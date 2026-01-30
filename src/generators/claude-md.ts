@@ -163,11 +163,15 @@ async function buildContext(
   // Build relevant patterns (pruned by project type to save tokens)
   const relevantPatterns = buildRelevantPatterns(analysis);
 
+  // Template version for reproducibility
+  const TEMPLATE_VERSION = '10.13-opt';
+
   return {
     // Project basics
     PROJECT_NAME: analysis.projectName || config.project.name,
     DESCRIPTION: analysis.description || config.project.description || '',
     DEFAULT_BRANCH: analysis.defaultBranch || config.project.defaultBranch || 'main',
+    TEMPLATE_VERSION,
     
     // Issue tracker
     ISSUE_TRACKER: analysis.issueTracker ? 
@@ -786,6 +790,47 @@ function buildRelevantPatterns(analysis: ProjectAnalysis): string | null {
   return `Active for this project: ${relevant.join(', ')}`;
 }
 
+/**
+ * Filter out noisy/fragmented content from prepopulated knowledge.
+ * Removes: table fragments, badge/image references, testimonials, README marketing content.
+ */
+function isNoisyContent(content: string): boolean {
+  // Filter out table fragments
+  if (content.startsWith('|') || content.includes('|---|')) return true;
+  // Filter out badge/image references
+  if (content.includes('[image:') || content.includes('![')) return true;
+  // Filter out HTML fragments
+  if (content.includes('<div') || content.includes('</div>')) return true;
+  // Filter out very short content (likely fragments)
+  if (content.length < 30) return true;
+  // Filter out content that's mostly symbols/punctuation
+  const alphaCount = (content.match(/[a-zA-Z]/g) || []).length;
+  if (alphaCount < content.length * 0.5) return true;
+  // Filter out testimonials and marketing quotes
+  if (content.includes('*"') || content.includes('"*') || content.includes('> *"')) return true;
+  // Filter out README-style content (installation instructions, promo text)
+  if (content.includes('npm install') && content.includes('global')) return true;
+  if (content.includes('conversation') && content.includes('assistant')) return true;
+  if (content.includes('After') && content.includes('months')) return true;
+  // Filter out command examples that are documentation, not lessons
+  if (content.startsWith('$ uam') || content.startsWith('$uam')) return true;
+  if (content.startsWith('bash <(curl')) return true;
+  // Filter out generic promotional phrases
+  if (content.includes('NOT limited') || content.includes('automatically route')) return true;
+  // Filter out README content patterns (setup instructions, feature descriptions)
+  if (content.includes('Install & Init') || content.includes('npm i -g')) return true;
+  if (content.includes('CLAUDE.md Generated') || content.includes('Auto-populated')) return true;
+  if (content.includes('Close-Out') || content.includes('Merge → Deploy')) return true;
+  if (content.includes('context-field research') || content.includes('Results from')) return true;
+  // Filter out gate/checklist content already in template
+  if (content.includes('Three gates must pass') || content.includes('Gate 1')) return true;
+  // Filter out content that's clearly documentation excerpts, not learned lessons
+  if (content.includes('never commits directly to main') || content.includes('All changes use worktrees')) return true;
+  if (content.includes("Work isn't") && content.includes('deployed')) return true;
+  if (content.includes('36 patterns discovered')) return true;
+  return false;
+}
+
 function buildPrepopulatedKnowledge(
   prepopulated: Awaited<ReturnType<typeof prepopulateMemory>> | null
 ): { recentActivity: string; learnedLessons: string; knownGotchas: string; hotSpots: string } | null {
@@ -793,16 +838,19 @@ function buildPrepopulatedKnowledge(
 
   const { shortTerm, longTerm } = prepopulated;
 
-  // Recent activity from short-term
+  // Recent activity from short-term (skip noisy content)
   const recentActivity = shortTerm
-    .filter(m => m.type === 'action' || m.type === 'observation')
+    .filter(m => (m.type === 'action' || m.type === 'observation') && !isNoisyContent(m.content))
     .slice(0, 10)
     .map(m => `- ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}`)
     .join('\n');
 
-  // Learned lessons from long-term - use sentence-aware truncation
+  // Learned lessons from long-term - filter noise and use sentence-aware truncation
   const learnedLessons = longTerm
-    .filter(m => m.tags?.includes('bug-fix') || m.tags?.includes('lesson') || (m.importance && m.importance >= 7))
+    .filter(m => 
+      (m.tags?.includes('bug-fix') || m.tags?.includes('lesson') || (m.importance && m.importance >= 7)) &&
+      !isNoisyContent(m.content)
+    )
     .slice(0, 10)
     .map(m => {
       const content = m.content;
@@ -815,9 +863,12 @@ function buildPrepopulatedKnowledge(
     })
     .join('\n');
 
-  // Known gotchas (from reverts and high-importance fixes) - preserve actionable suffix
+  // Known gotchas (from reverts and high-importance fixes) - filter noise
   const knownGotchas = longTerm
-    .filter(m => m.tags?.includes('revert') || m.tags?.includes('failed-approach') || m.content.includes('avoid'))
+    .filter(m => 
+      (m.tags?.includes('revert') || m.tags?.includes('failed-approach') || m.content.includes('avoid')) &&
+      !isNoisyContent(m.content)
+    )
     .slice(0, 5)
     .map(m => {
       const content = m.content;

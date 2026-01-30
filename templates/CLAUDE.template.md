@@ -1,4 +1,4 @@
-<!-- CLAUDE.md v10.12-opt - Optimized Universal Template -->
+<!-- CLAUDE.md v10.13-opt - Optimized Universal Template -->
 <coding_guidelines>
 
 # {{PROJECT_NAME}} - Autonomous Agent Guide
@@ -104,7 +104,7 @@ ACTIVE: [list YES only]
 | 32 | CEV | CLI tool | Test `./script` not `python script` |
 | 33 | NST | Numerical | Multiple seeds, edge cases, tolerance 1e-6 |
 | 34 | ISP | Image analysis | Use recognition tools, not reasoning |
-| 35 | DFA | Encode+decoder given | Read decoder FIRST, match format |
+| 35 | **DFA** | Encode+decoder given | Read decoder FIRST, match format exactly, test round-trip BEFORE optimizing |
 | 36 | CDR | Competition | Research strategies BEFORE implementing |
 
 ---
@@ -123,6 +123,52 @@ ACTIVE: [list YES only]
 # Gate 1: for f in $EXPECTED; do [ -f "$f" ] || echo "MISSING: $f"; done
 # Gate 3: {{TEST_COMMAND}}
 ```
+
+---
+
+## NEAR-MISS ITERATION PROTOCOL (P26 ENFORCED)
+
+When >50% of tests pass but not all:
+1. **Read exact failure message** for each failing test
+2. **Fix ONLY the specific failing test** - do not refactor passing code
+3. **Re-run tests** immediately after each fix
+4. **Reserve 30% of time budget** for this iteration loop
+5. **Repeat** until 100% pass or time exhausted
+6. **Never give up** on a task that is >50% passing - small fixes flip outcomes
+
+---
+
+## DECODER-FIRST PROTOCOL (P35 ENFORCED)
+
+When a task provides a decoder, validator, or expected output format:
+1. **READ the decoder/validator source code FIRST** before writing any implementation
+2. **Extract the exact format** it expects (headers, encoding, byte order, etc.)
+3. **Implement encoder/generator** to match that exact format
+4. **Test round-trip**: `original == decode(encode(original))` BEFORE optimizing
+5. **Never optimize** until round-trip verification passes
+
+---
+
+## ERROR RECOVERY ESCALATION
+
+On any test failure or error:
+1. **Read exact error message** - do not guess
+2. **If same error twice**: change approach completely, do not retry same fix
+3. **If dependency missing**: install it (`pip install`, `npm install`, `apt-get`)
+4. **If permission denied**: use alternative path or `chmod`
+5. **If timeout**: reduce scope, submit partial solution
+6. **Never repeat a failed command** without modification
+
+---
+
+## TIME BUDGET ALLOCATION
+
+For complex tasks (compilation, VM, multi-service):
+- **20%** - Environment assessment (deps, tools, constraints)
+- **50%** - Core implementation
+- **30%** - Iteration, debugging, test fixes
+
+If timeout approaching: submit best partial solution rather than nothing.
 
 ---
 
@@ -170,12 +216,6 @@ uam agent overlaps --resource "<files>"
 | none/low | Proceed |
 | medium | Announce, coordinate |
 | high/critical | Wait or split |
-
-**Parallel review before PR:**
-```bash
-Task(subagent_type: "security-auditor", ...)
-Task(subagent_type: "code-quality-guardian", ...)
-```
 
 ---
 
@@ -322,9 +362,12 @@ MERGE → DEPLOY → MONITOR → FIX (iterate until 100%)
 2. **CHECK ENV**: `which tool` before using
 3. **CLI > LIBRARIES**: Use subprocess when uncertain
 4. **VERIFY OUTPUTS**: `ls -la` ALL expected files before "done"
-5. **ITERATE**: On partial test pass, fix specific failure, re-run
+5. **ITERATE**: On partial test pass, fix specific failure, re-run (P26)
 6. **CREATE > EXPLAIN**: Missing output? CREATE it, don't explain
 7. **REFUSE IMPOSSIBLE**: Compression below Shannon limit → IMPOSSIBLE.md
+8. **DECODER FIRST**: When decoder/validator provided, READ IT FIRST (P35)
+9. **ERROR ESCALATION**: Same error twice → change approach completely
+10. **TIME BUDGET**: Reserve 30% for iteration/debugging
 
 **P17 Active? Print:**
 ```
