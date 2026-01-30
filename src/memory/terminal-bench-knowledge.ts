@@ -223,8 +223,96 @@ export function formatKnowledgeForContext(knowledge: DomainKnowledge[]): string 
   return lines.join('\n');
 }
 
+/**
+ * Record knowledge outcome and optionally persist to long-term memory.
+ * Call this when a task succeeds or fails to improve future accuracy.
+ * 
+ * @param taskPattern - Keywords describing the task (e.g., "password 7z crack")
+ * @param success - Whether the task succeeded
+ * @param learnedKnowledge - Optional new knowledge to persist (only on success)
+ * @param persistPath - Path to long_term_prepopulated.json (optional)
+ */
+export function recordKnowledgeOutcome(
+  taskPattern: string,
+  success: boolean,
+  learnedKnowledge?: Omit<DomainKnowledge, 'importance'> & { importance?: number },
+  persistPath?: string
+): void {
+  // Update relevance/importance of existing knowledge based on outcome
+  const matchedKnowledge = getRelevantKnowledge(taskPattern);
+  for (const k of matchedKnowledge) {
+    // Find in main array and adjust importance
+    const original = TERMINAL_BENCH_KNOWLEDGE.find(
+      tk => tk.content === k.content && tk.category === k.category
+    );
+    if (original) {
+      if (success) {
+        // Boost importance on success (max 10)
+        original.importance = Math.min(10, original.importance + 0.5);
+      } else {
+        // Slightly reduce importance on failure (min 3)
+        original.importance = Math.max(3, original.importance - 0.2);
+      }
+    }
+  }
+  
+  // Add new knowledge if provided and task succeeded
+  if (success && learnedKnowledge) {
+    const newEntry: DomainKnowledge = {
+      ...learnedKnowledge,
+      importance: learnedKnowledge.importance ?? 7,
+    };
+    
+    // Check if similar knowledge already exists
+    const exists = TERMINAL_BENCH_KNOWLEDGE.some(
+      k => k.content === newEntry.content || 
+           (k.category === newEntry.category && 
+            k.keywords.some(kw => newEntry.keywords.includes(kw)))
+    );
+    
+    if (!exists) {
+      TERMINAL_BENCH_KNOWLEDGE.push(newEntry);
+      
+      // Persist to file if path provided (fire-and-forget, don't block)
+      if (persistPath) {
+        persistNewKnowledge(newEntry, persistPath).catch(() => {});
+      }
+    }
+  }
+}
+
+/**
+ * Persist new knowledge to long_term_prepopulated.json
+ */
+async function persistNewKnowledge(knowledge: DomainKnowledge, filePath: string): Promise<void> {
+  try {
+    const fs = await import('fs');
+    
+    let data: { memories?: Array<DomainKnowledge & { addedAt?: string }> } = { memories: [] };
+    if (fs.existsSync(filePath)) {
+      try {
+        data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      } catch {
+        // Start fresh if parse fails
+      }
+    }
+    
+    if (!data.memories) data.memories = [];
+    
+    data.memories.push({
+      ...knowledge,
+      addedAt: new Date().toISOString(),
+    });
+    
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+  } catch {
+    // Silently fail persistence - don't break the main flow
+  }
+}
+
 export default {
   TERMINAL_BENCH_KNOWLEDGE,
   getRelevantKnowledge,
   formatKnowledgeForContext,
+  recordKnowledgeOutcome,
 };

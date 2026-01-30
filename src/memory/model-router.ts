@@ -14,6 +14,11 @@ import { classifyTask, type TaskClassification } from './task-classifier.js';
 
 export type ModelId = 'glm-4.7' | 'gpt-5.2' | 'claude-opus-4.5' | 'gpt-5.2-codex';
 
+export interface CategoryStats {
+  attempts: number;
+  successes: number;
+}
+
 export interface ModelFingerprint {
   id: ModelId;
   strengths: string[];
@@ -23,6 +28,7 @@ export interface ModelFingerprint {
   costPerTask: number;
   maxComplexity: 'easy' | 'medium' | 'hard';
   bestCategories: string[];
+  categoryStats?: Record<string, CategoryStats>;
 }
 
 export interface RoutingDecision {
@@ -141,8 +147,12 @@ function scoreModel(
     score -= 50; // Penalty for difficulty exceeding capability
   }
 
+  // Use per-category success rate if available, otherwise fall back to global
+  const categoryRate = getCategorySuccessRate(model, classification.category);
+  const effectiveSuccessRate = categoryRate ?? model.successRate;
+
   // Success rate (0-25 points)
-  score += model.successRate * 25;
+  score += effectiveSuccessRate * 25;
 
   // Latency preference (0-15 points)
   if (config.preferLatency) {
@@ -152,7 +162,7 @@ function scoreModel(
 
   // Accuracy preference bonus
   if (config.preferAccuracy) {
-    score += model.successRate * 10;
+    score += effectiveSuccessRate * 10;
   }
 
   // Cost constraint
@@ -174,6 +184,16 @@ function scoreModel(
   }
 
   return score;
+}
+
+/**
+ * Get per-category success rate if enough data exists (>=3 attempts)
+ * Returns null if not enough data, allowing fallback to global rate
+ */
+function getCategorySuccessRate(model: ModelFingerprint, category: string): number | null {
+  const stats = model.categoryStats?.[category];
+  if (!stats || stats.attempts < 3) return null;
+  return stats.successes / stats.attempts;
 }
 
 /**
@@ -267,22 +287,35 @@ export function updateModelFingerprint(
 /**
  * Record task outcome to update model fingerprints (feedback loop)
  * Call this after each task completes to improve future routing decisions
+ * Now tracks per-category success rates for more intelligent routing
  */
 export function recordTaskOutcome(
   modelId: ModelId,
   success: boolean,
   latencyMs: number,
-  _taskCategory?: string
+  taskCategory?: string
 ): void {
   const fp = MODEL_FINGERPRINTS[modelId];
   if (!fp) return;
   
-  // Update success rate using exponential moving average
+  // Update global success rate using exponential moving average
   const newSuccessRate = success ? 1.0 : 0.0;
   fp.successRate = fp.successRate * 0.9 + newSuccessRate * 0.1;
   
   // Update latency using exponential moving average
   fp.avgLatencyMs = fp.avgLatencyMs * 0.8 + latencyMs * 0.2;
+  
+  // Update per-category stats if category provided
+  if (taskCategory) {
+    if (!fp.categoryStats) fp.categoryStats = {};
+    if (!fp.categoryStats[taskCategory]) {
+      fp.categoryStats[taskCategory] = { attempts: 0, successes: 0 };
+    }
+    fp.categoryStats[taskCategory].attempts++;
+    if (success) {
+      fp.categoryStats[taskCategory].successes++;
+    }
+  }
 }
 
 /**

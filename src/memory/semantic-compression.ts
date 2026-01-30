@@ -106,13 +106,7 @@ export function extractAtomicFacts(content: string, minEntropy: number = 0.3): A
   for (const sentence of sentences) {
     const normalized = sentence.toLowerCase();
     
-    // Skip low-entropy (repetitive) content
-    const entropy = calculateEntropy(sentence);
-    if (entropy < minEntropy && sentence.length > 50) {
-      continue; // Skip long repetitive sentences
-    }
-    
-    // Determine fact type
+    // Determine fact type early so we can skip entropy filtering for gotchas
     let type: AtomicFact['type'] = 'fact';
     if (/learned|realized|discovered|found that/i.test(sentence)) {
       type = 'lesson';
@@ -120,8 +114,16 @@ export function extractAtomicFacts(content: string, minEntropy: number = 0.3): A
       type = 'decision';
     } else if (/pattern|always|usually|typically/i.test(sentence)) {
       type = 'pattern';
-    } else if (/careful|watch out|gotcha|avoid|don't|never/i.test(sentence)) {
+    } else if (/careful|watch out|gotcha|avoid|don't|never|must|critical|important/i.test(sentence)) {
       type = 'gotcha';
+    }
+    
+    // Skip low-entropy (repetitive) content, but NEVER skip gotchas or lessons
+    // These contain critical domain knowledge that may have low lexical entropy
+    // but high informational value (e.g., "COBOL: Fixed column format (7-72 are code)")
+    const entropy = calculateEntropy(sentence);
+    if (entropy < minEntropy && sentence.length > 50 && type !== 'gotcha' && type !== 'lesson') {
+      continue;
     }
     
     // Calculate actionability (boost by entropy for high-info content)

@@ -18,7 +18,7 @@ import { ContextBudget } from './context-compressor.js';
 import { compressToSemanticUnits } from './semantic-compression.js';
 import { decideContextLevel, type ContextDecision, type TaskMetadata } from './adaptive-context.js';
 import { getRelevantKnowledge } from './terminal-bench-knowledge.js';
-import { contentHash } from '../utils/string-similarity.js';
+import { contentHash, jaccardSimilarity } from '../utils/string-similarity.js';
 
 /**
  * Query complexity levels for adaptive retrieval
@@ -35,9 +35,9 @@ export interface RetrievalDepthConfig {
 }
 
 const DEFAULT_RETRIEVAL_DEPTHS: RetrievalDepthConfig = {
-  simple: { shortTerm: 3, sessionMem: 2, longTerm: 3, patterns: 2 },
-  moderate: { shortTerm: 5, sessionMem: 4, longTerm: 5, patterns: 4 },
-  complex: { shortTerm: 8, sessionMem: 6, longTerm: 10, patterns: 6 },
+  simple: { shortTerm: 3, sessionMem: 2, longTerm: 5, patterns: 3 },
+  moderate: { shortTerm: 6, sessionMem: 5, longTerm: 8, patterns: 5 },
+  complex: { shortTerm: 10, sessionMem: 8, longTerm: 15, patterns: 8 },
 };
 
 /**
@@ -319,10 +319,21 @@ async function queryAllMemorySources(
     });
   }
   
-  // Deduplicate and sort by relevance
+  // Deduplicate, sort by relevance, and apply token-budget-aware cap
   const uniqueMemories = deduplicateMemories(memories);
-  const maxTotal = depth.shortTerm + depth.sessionMem + depth.longTerm + depth.patterns;
-  return uniqueMemories.sort((a, b) => b.relevance - a.relevance).slice(0, maxTotal);
+  uniqueMemories.sort((a, b) => b.relevance - a.relevance);
+  
+  // Use token budget instead of hard count cap to maximize useful context
+  const TOKEN_BUDGET = 3000;
+  const budgeted: RetrievedMemory[] = [];
+  let usedTokens = 0;
+  for (const mem of uniqueMemories) {
+    const memTokens = Math.ceil(mem.content.length / 4);
+    if (usedTokens + memTokens > TOKEN_BUDGET && budgeted.length > 0) break;
+    budgeted.push(mem);
+    usedTokens += memTokens;
+  }
+  return budgeted;
 }
 
 /**
@@ -700,17 +711,37 @@ function formatContextWithRecencyBias(
 }
 
 /**
- * Deduplicate memories by content hash (full content, not just prefix)
- * Uses SHA-256 based content hash for reliable deduplication
+ * Deduplicate memories by content hash AND semantic similarity
+ * Uses SHA-256 based content hash for exact deduplication,
+ * then Jaccard similarity for near-duplicate detection
  */
 function deduplicateMemories(memories: RetrievedMemory[]): RetrievedMemory[] {
   const seen = new Set<string>();
   const unique: RetrievedMemory[] = [];
+  const SIMILARITY_THRESHOLD = 0.8;
   
   for (const mem of memories) {
-    // Use full content hash instead of just first 100 chars
+    // Phase 1: Exact content hash deduplication
     const key = contentHash(mem.content);
-    if (!seen.has(key)) {
+    if (seen.has(key)) continue;
+    
+    // Phase 2: Semantic similarity check against existing unique memories
+    const contentLower = mem.content.toLowerCase();
+    let isDuplicate = false;
+    for (const existing of unique) {
+      const similarity = jaccardSimilarity(contentLower, existing.content.toLowerCase());
+      if (similarity > SIMILARITY_THRESHOLD) {
+        isDuplicate = true;
+        // Keep the one with higher relevance
+        if (mem.relevance > existing.relevance) {
+          const idx = unique.indexOf(existing);
+          unique[idx] = mem;
+        }
+        break;
+      }
+    }
+    
+    if (!isDuplicate) {
       seen.add(key);
       unique.push(mem);
     }

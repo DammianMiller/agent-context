@@ -31,7 +31,7 @@ export class IndexedDBShortTermMemory {
     this.maxEntries = config.maxEntries || 50;
   }
 
-  async store(type: ShortTermMemory['type'], content: string): Promise<void> {
+  async store(type: ShortTermMemory['type'], content: string, _importance?: number): Promise<void> {
     await this.db.memories.add({
       timestamp: new Date().toISOString(),
       type,

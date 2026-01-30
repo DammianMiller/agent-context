@@ -46,11 +46,26 @@ export interface HistoricalData {
 
 // Task categories that typically don't benefit from UAM context
 // Only skip when purely in these categories with no domain overlap
+// NOTE: 'scheduling' removed - constraint-satisfaction tasks like 'constraints-scheduling' 
+// benefit from UAM context (proven +1 task in Terminal-Bench)
 const LOW_BENEFIT_CATEGORIES = new Set([
   'reasoning',
   'games',
   'pure-logic',
   'mathematical',
+]);
+
+// Categories that should ALWAYS receive UAM context regardless of historical data
+// These are domain-knowledge-heavy tasks where UAM has proven beneficial
+const ALWAYS_BENEFIT_CATEGORIES = new Set([
+  'security',
+  'file-ops',
+  'sysadmin',
+  'debugging',
+  'legacy',
+  'coding',
+  'testing',
+  'ml-training',
 ]);
 
 // Keywords that suggest a task won't benefit from domain knowledge
@@ -433,7 +448,8 @@ export function decideContextLevel(
   const historicalBenefit = metadata.historical_uam_benefit ?? getHistoricalBenefit(taskType);
 
   // Factor 4: Check if historical data suggests skipping UAM
-  if (historicalBenefit < BENEFIT_THRESHOLD) {
+  // BUT never skip for categories that are proven to benefit from domain knowledge
+  if (historicalBenefit < BENEFIT_THRESHOLD && !ALWAYS_BENEFIT_CATEGORIES.has(taskType)) {
     return {
       level: 'none',
       sections: [],

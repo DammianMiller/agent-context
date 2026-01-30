@@ -160,6 +160,9 @@ async function buildContext(
   // Build language examples
   const languageExamples = buildLanguageExamples(analysis.languages);
 
+  // Build relevant patterns (pruned by project type to save tokens)
+  const relevantPatterns = buildRelevantPatterns(analysis);
+
   return {
     // Project basics
     PROJECT_NAME: analysis.projectName || config.project.name,
@@ -278,6 +281,9 @@ async function buildContext(
     HAS_PROJECT_MD: existsSync(join(cwd, '.factory/PROJECT.md')) || 
                     existsSync(join(cwd, 'templates/PROJECT.md')) ||
                     existsSync(join(cwd, 'PROJECT.md')),
+    
+    // Relevant patterns (pruned by project type to save ~800 tokens)
+    RELEVANT_PATTERNS: relevantPatterns,
   };
 }
 
@@ -734,6 +740,50 @@ function buildFileTypeRouting(languages: string[]): string | null {
   }
 
   return routing.length > 0 ? routing.join('\n') : null;
+}
+
+/**
+ * Build relevant patterns list based on project type.
+ * Prunes domain-specific patterns (Chess, Compression impossible, Polyglot, etc.)
+ * that don't apply to the project, saving ~800 tokens of context window.
+ */
+function buildRelevantPatterns(analysis: ProjectAnalysis): string | null {
+  const languages = analysis.languages.map(l => l.toLowerCase());
+  const hasInfra = analysis.directories.infrastructure.length > 0;
+  const hasSecurity = languages.some(l => l.includes('python') || l.includes('javascript') || l.includes('typescript'));
+  const hasGit = true; // All projects use git
+  
+  // Always-relevant core patterns
+  const relevant: string[] = [
+    'P1 (EnvIsolation)', 'P2 (Recipe)', 'P3 (StateProtect)', 
+    'P4 (ToolSpec)', 'P7 (Classify)', 'P8 (CLIoverLib)',
+    'P12 (OEV)', 'P13 (IRL)', 'P15 (ER)', 'P16 (TFE)',
+    'P17 (CE)', 'P18 (MTP)',
+    'P27 (ODC)', 'P29 (MSD)',
+  ];
+  
+  // Conditionally add domain patterns
+  if (hasSecurity) relevant.push('P10 (Whitelist)', 'P20 (AT)');
+  if (hasGit) relevant.push('P22 (GRF)');
+  if (hasInfra) relevant.push('P25 (SCP)', 'P28 (SST)');
+  if (languages.some(l => l.includes('rust') || l.includes('c++') || l.includes('python'))) {
+    relevant.push('P33 (NST)');
+  }
+  
+  // Skip by default (only add if explicitly needed):
+  // P21 (Chess/Stockfish) - only for chess projects
+  // P23 (Compression impossible) - only for compression projects
+  // P24 (Polyglot) - only for polyglot projects
+  // P34 (Image analysis) - only for image projects
+  
+  if (analysis.components.some(c => c.name.toLowerCase().includes('chess') || c.description?.toLowerCase().includes('chess'))) {
+    relevant.push('P21 (CEI)');
+  }
+  if (analysis.components.some(c => c.name.toLowerCase().includes('compress') || c.description?.toLowerCase().includes('compress'))) {
+    relevant.push('P23 (CID)', 'P31 (RTV)');
+  }
+  
+  return `Active for this project: ${relevant.join(', ')}`;
 }
 
 function buildPrepopulatedKnowledge(

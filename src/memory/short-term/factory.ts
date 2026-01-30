@@ -3,10 +3,10 @@ import { SQLiteShortTermMemory } from './sqlite.js';
 import type { AgentContextConfig } from '../../types/index.js';
 
 export interface ShortTermMemoryBackend {
-  store(type: 'action' | 'observation' | 'thought' | 'goal', content: string): Promise<void>;
-  storeBatch?(entries: Array<{ type: 'action' | 'observation' | 'thought' | 'goal'; content: string; timestamp?: string }>): Promise<void>;
-  getRecent(limit?: number): Promise<Array<{ timestamp: string; type: string; content: string }>>;
-  query(searchTerm: string, limit?: number): Promise<Array<{ timestamp: string; type: string; content: string }>>;
+  store(type: 'action' | 'observation' | 'thought' | 'goal', content: string, importance?: number): Promise<void>;
+  storeBatch?(entries: Array<{ type: 'action' | 'observation' | 'thought' | 'goal'; content: string; timestamp?: string; importance?: number }>): Promise<void>;
+  getRecent(limit?: number): Promise<Array<{ timestamp: string; type: string; content: string; importance?: number }>>;
+  query(searchTerm: string, limit?: number): Promise<Array<{ timestamp: string; type: string; content: string; importance?: number }>>;
   clear(): Promise<void>;
   close?(): Promise<void>;
 }

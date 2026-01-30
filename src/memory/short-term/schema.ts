@@ -9,13 +9,26 @@ export function ensureShortTermSchema(db: Database.Database): void {
       timestamp TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('action', 'observation', 'thought', 'goal')),
       content TEXT NOT NULL,
-      project_id TEXT NOT NULL DEFAULT 'default'
+      project_id TEXT NOT NULL DEFAULT 'default',
+      importance INTEGER NOT NULL DEFAULT 5
     );
     CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
     CREATE INDEX IF NOT EXISTS idx_memories_timestamp ON memories(timestamp);
     CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
     CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project_id, type);
+    CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC);
   `);
+
+  // Migration: add importance column if missing (for existing databases)
+  try {
+    const cols = db.prepare("PRAGMA table_info(memories)").all() as Array<{ name: string }>;
+    if (!cols.some(c => c.name === 'importance')) {
+      db.exec(`ALTER TABLE memories ADD COLUMN importance INTEGER NOT NULL DEFAULT 5`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC)`);
+    }
+  } catch {
+    // Ignore migration errors - column may already exist
+  }
 
   // Enable WAL mode for concurrent reads and better write performance
   db.pragma('journal_mode = WAL');

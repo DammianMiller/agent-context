@@ -11,6 +11,7 @@ interface ShortTermMemory {
   type: 'action' | 'observation' | 'thought' | 'goal';
   content: string;
   projectId?: string;
+  importance?: number;
 }
 
 export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
@@ -38,13 +39,13 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
     ensureShortTermSchema(this.db);
   }
 
-  async store(type: ShortTermMemory['type'], content: string): Promise<void> {
+  async store(type: ShortTermMemory['type'], content: string, importance: number = 5): Promise<void> {
     const timestamp = new Date().toISOString();
     const stmt = this.db.prepare(`
-      INSERT INTO memories (timestamp, type, content, project_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO memories (timestamp, type, content, project_id, importance)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(timestamp, type, content, this.projectId);
+    const result = stmt.run(timestamp, type, content, this.projectId, importance);
 
     // Update FTS5 index
     try {
@@ -62,21 +63,22 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
   }
 
   async storeBatch(
-    entries: Array<{ type: ShortTermMemory['type']; content: string; timestamp?: string }>
+    entries: Array<{ type: ShortTermMemory['type']; content: string; timestamp?: string; importance?: number }>
   ): Promise<void> {
     const stmt = this.db.prepare(`
-      INSERT INTO memories (timestamp, type, content, project_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO memories (timestamp, type, content, project_id, importance)
+      VALUES (?, ?, ?, ?, ?)
     `);
 
-    type EntryType = { type: ShortTermMemory['type']; content: string; timestamp?: string };
+    type EntryType = { type: ShortTermMemory['type']; content: string; timestamp?: string; importance?: number };
     const insertMany = this.db.transaction((items: EntryType[]) => {
       for (const entry of items) {
         stmt.run(
           entry.timestamp || new Date().toISOString(),
           entry.type,
           entry.content,
-          this.projectId
+          this.projectId,
+          entry.importance ?? 5
         );
       }
     });
@@ -87,7 +89,7 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
 
   async getRecent(limit = 50): Promise<ShortTermMemory[]> {
     const stmt = this.db.prepare(`
-      SELECT id, timestamp, type, content, project_id as projectId
+      SELECT id, timestamp, type, content, project_id as projectId, importance
       FROM memories
       WHERE project_id = ?
       ORDER BY id DESC
@@ -106,17 +108,21 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
 
     let results: ShortTermMemory[] = [];
 
+    // Sanitize search term for FTS5 - escape special characters and wrap in quotes
+    // FTS5 special chars: AND OR NOT * " - ( ) NEAR
+    const sanitizedTerm = this.sanitizeFTS5Query(searchTerm);
+
     // Try FTS5 first for faster full-text search
     try {
       const ftsStmt = this.db.prepare(`
-        SELECT m.id, m.timestamp, m.type, m.content, m.project_id as projectId
+        SELECT m.id, m.timestamp, m.type, m.content, m.project_id as projectId, m.importance
         FROM memories_fts fts
         JOIN memories m ON fts.rowid = m.id
         WHERE memories_fts MATCH ? AND m.project_id = ?
         ORDER BY rank
         LIMIT ?
       `);
-      results = ftsStmt.all(searchTerm, this.projectId, limit) as ShortTermMemory[];
+      results = ftsStmt.all(sanitizedTerm, this.projectId, limit) as ShortTermMemory[];
     } catch {
       // FTS5 not available or query syntax error, fall through to LIKE
     }
@@ -124,7 +130,7 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
     // Fallback to LIKE search if FTS5 returned nothing
     if (results.length === 0) {
       const stmt = this.db.prepare(`
-        SELECT id, timestamp, type, content, project_id as projectId
+        SELECT id, timestamp, type, content, project_id as projectId, importance
         FROM memories
         WHERE project_id = ? AND content LIKE ?
         ORDER BY id DESC
@@ -148,24 +154,37 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
     return results;
   }
 
+  /**
+   * Sanitize search term for FTS5 query syntax
+   * Wraps each word in double quotes to prevent FTS5 syntax errors from
+   * special characters like AND, OR, NOT, *, -, parentheses, etc.
+   */
+  private sanitizeFTS5Query(searchTerm: string): string {
+    const words = searchTerm.trim().split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return '""';
+    // Quote each word individually and join with spaces (implicit AND)
+    return words.map(w => `"${w.replace(/"/g, '""')}"`).join(' ');
+  }
+
   private async queryWithoutCache(searchTerm: string, limit: number): Promise<ShortTermMemory[]> {
+    const sanitizedTerm = this.sanitizeFTS5Query(searchTerm);
     try {
       const ftsStmt = this.db.prepare(`
-        SELECT m.id, m.timestamp, m.type, m.content, m.project_id as projectId
+        SELECT m.id, m.timestamp, m.type, m.content, m.project_id as projectId, m.importance
         FROM memories_fts fts
         JOIN memories m ON fts.rowid = m.id
         WHERE memories_fts MATCH ? AND m.project_id = ?
         ORDER BY rank
         LIMIT ?
       `);
-      const results = ftsStmt.all(searchTerm, this.projectId, limit) as ShortTermMemory[];
+      const results = ftsStmt.all(sanitizedTerm, this.projectId, limit) as ShortTermMemory[];
       if (results.length > 0) return results;
     } catch {
       // FTS5 not available
     }
 
     const stmt = this.db.prepare(`
-      SELECT id, timestamp, type, content, project_id as projectId
+      SELECT id, timestamp, type, content, project_id as projectId, importance
       FROM memories
       WHERE project_id = ? AND content LIKE ?
       ORDER BY id DESC
@@ -176,7 +195,7 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
 
   async getByType(type: ShortTermMemory['type'], limit = 50): Promise<ShortTermMemory[]> {
     const stmt = this.db.prepare(`
-      SELECT id, timestamp, type, content, project_id as projectId
+      SELECT id, timestamp, type, content, project_id as projectId, importance
       FROM memories
       WHERE project_id = ? AND type = ?
       ORDER BY id DESC
@@ -199,12 +218,14 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
     const count = await this.count();
     if (count > this.maxEntries) {
       const toDelete = count - this.maxEntries;
+      // Importance-aware pruning: delete lowest importance first, then oldest
+      // This retains high-value memories longer regardless of age
       const stmt = this.db.prepare(`
         DELETE FROM memories
         WHERE id IN (
           SELECT id FROM memories
           WHERE project_id = ?
-          ORDER BY id ASC
+          ORDER BY importance ASC, id ASC
           LIMIT ?
         )
       `);
@@ -227,7 +248,7 @@ export class SQLiteShortTermMemory implements ShortTermMemoryBackend {
   // Export all memories as JSON (useful for backup/migration)
   async exportAll(): Promise<ShortTermMemory[]> {
     const stmt = this.db.prepare(`
-      SELECT id, timestamp, type, content, project_id as projectId
+      SELECT id, timestamp, type, content, project_id as projectId, importance
       FROM memories
       WHERE project_id = ?
       ORDER BY id ASC
