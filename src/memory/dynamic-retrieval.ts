@@ -16,6 +16,8 @@ import { execSync } from 'child_process';
 import { classifyTask, extractTaskEntities, getSuggestedMemoryQueries, type TaskClassification } from './task-classifier.js';
 import { ContextBudget } from './context-compressor.js';
 import { compressToSemanticUnits } from './semantic-compression.js';
+import { decideContextLevel, type ContextDecision, type TaskMetadata } from './adaptive-context.js';
+import { getRelevantKnowledge } from './terminal-bench-knowledge.js';
 
 /**
  * Query complexity levels for adaptive retrieval
@@ -119,6 +121,7 @@ export interface DynamicMemoryContext {
   queryComplexity: QueryComplexity;
   tokenBudget: { used: number; remaining: number; total: number };
   compressionStats?: { ratio: number; sourceTokens: number; compressedTokens: number };
+  contextDecision?: ContextDecision;
 }
 
 /**
@@ -131,9 +134,32 @@ export async function retrieveDynamicMemoryContext(
   options: {
     maxTokens?: number;
     useSemanticCompression?: boolean;
+    taskMetadata?: TaskMetadata;
   } = {}
 ): Promise<DynamicMemoryContext> {
-  const { maxTokens = 4000, useSemanticCompression = true } = options;
+  const { maxTokens = 2000, useSemanticCompression = true, taskMetadata } = options;
+  
+  // Step 0: Adaptive context decision - skip UAM if not beneficial
+  const contextDecision = decideContextLevel(taskInstruction, taskMetadata);
+  if (contextDecision.level === 'none') {
+    const classification = classifyTask(taskInstruction);
+    return {
+      classification,
+      relevantMemories: [],
+      patterns: [],
+      gotchas: [],
+      projectContext: '',
+      formattedContext: '',
+      queryComplexity: 'simple',
+      tokenBudget: { used: 0, remaining: maxTokens, total: maxTokens },
+      contextDecision,
+    };
+  }
+  
+  // Adjust maxTokens based on context decision
+  const effectiveMaxTokens = contextDecision.level === 'minimal'
+    ? Math.min(maxTokens, 800)
+    : maxTokens;
   
   // Step 1: Classify the task
   const classification = classifyTask(taskInstruction);
@@ -143,7 +169,7 @@ export async function retrieveDynamicMemoryContext(
   const retrievalDepth = getRetrievalDepth(queryComplexity);
   
   // Step 3: Initialize context budget
-  const budget = new ContextBudget(maxTokens);
+  const budget = new ContextBudget(effectiveMaxTokens);
   
   // Step 4: Extract entities from task
   const entities = extractTaskEntities(taskInstruction);
@@ -231,9 +257,10 @@ export async function retrieveDynamicMemoryContext(
     tokenBudget: {
       used: budget.usage().used,
       remaining: budget.remaining(),
-      total: maxTokens,
+      total: effectiveMaxTokens,
     },
     compressionStats,
+    contextDecision,
   };
 }
 
@@ -279,6 +306,17 @@ async function queryAllMemorySources(
   // Source 5: Category-specific patterns from droids (limited by depth)
   const droidPatterns = getCategoryPatterns(classification, depth.patterns);
   memories.push(...droidPatterns);
+
+  // Source 6: Terminal-Bench domain knowledge (proven to improve accuracy)
+  const domainKnowledge = getRelevantKnowledge(taskInstruction, classification.category);
+  for (const k of domainKnowledge) {
+    memories.push({
+      content: k.content,
+      type: k.type === 'gotcha' ? 'gotcha' : k.type === 'pattern' ? 'pattern' : 'context',
+      relevance: k.importance / 10,
+      source: 'terminal-bench-knowledge',
+    });
+  }
   
   // Deduplicate and sort by relevance
   const uniqueMemories = deduplicateMemories(memories);

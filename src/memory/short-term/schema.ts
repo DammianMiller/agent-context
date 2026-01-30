@@ -13,7 +13,35 @@ export function ensureShortTermSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_memories_project_id ON memories(project_id);
     CREATE INDEX IF NOT EXISTS idx_memories_timestamp ON memories(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
+    CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project_id, type);
   `);
+
+  // Enable WAL mode for concurrent reads and better write performance
+  db.pragma('journal_mode = WAL');
+  db.pragma('synchronous = NORMAL');
+  db.pragma('mmap_size = 268435456');
+  db.pragma('cache_size = -64000');
+
+  // Create FTS5 virtual table for full-text search
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+      content,
+      type,
+      content_rowid=id,
+      tokenize='porter unicode61'
+    );
+  `);
+
+  // Populate FTS if empty but memories exist
+  const ftsCount = (db.prepare('SELECT COUNT(*) as c FROM memories_fts').get() as { c: number }).c;
+  const memCount = (db.prepare('SELECT COUNT(*) as c FROM memories').get() as { c: number }).c;
+  if (ftsCount === 0 && memCount > 0) {
+    db.exec(`
+      INSERT INTO memories_fts(rowid, content, type)
+      SELECT id, content, type FROM memories;
+    `);
+  }
 }
 
 export function ensureSessionSchema(db: Database.Database): void {
@@ -29,6 +57,18 @@ export function ensureSessionSchema(db: Database.Database): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_session_unique ON session_memories(session_id, content);
     CREATE INDEX IF NOT EXISTS idx_session_id ON session_memories(session_id);
     CREATE INDEX IF NOT EXISTS idx_session_timestamp ON session_memories(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_session_importance ON session_memories(importance DESC);
+    CREATE INDEX IF NOT EXISTS idx_session_id_importance ON session_memories(session_id, importance DESC);
+  `);
+
+  // Create FTS5 for session memories
+  db.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS session_memories_fts USING fts5(
+      content,
+      type,
+      content_rowid=id,
+      tokenize='porter unicode61'
+    );
   `);
 }
 

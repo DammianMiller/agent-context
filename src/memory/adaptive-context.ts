@@ -155,10 +155,16 @@ const CONTEXT_SECTIONS: Record<
 };
 
 // Estimated overhead per token (ms) - accounts for context processing
-const MS_PER_TOKEN = 4;
+const MS_PER_TOKEN = 3;
 
 // Historical benefit threshold - below this, skip UAM
 const BENEFIT_THRESHOLD = 0.1;
+
+// Minimum relevance score to include a section (0-1)
+const RELEVANCE_THRESHOLD = 0.5;
+
+// Max tokens for time-critical tasks (<120s timeout)
+const TIME_CRITICAL_MAX_TOKENS = 200;
 
 // In-memory historical data store (in production, use SQLite)
 const historicalDataStore = new Map<string, HistoricalData>();
@@ -314,19 +320,38 @@ export function recordOutcome(
 }
 
 /**
+ * Calculate relevance score for a section (0-1)
+ */
+function calculateSectionRelevance(instruction: string, sectionConfig: { keywords: string[] }): number {
+  const lower = instruction.toLowerCase();
+  let matches = 0;
+  for (const kw of sectionConfig.keywords) {
+    if (lower.includes(kw.toLowerCase())) {
+      matches++;
+    }
+  }
+  return Math.min(matches / Math.max(sectionConfig.keywords.length * 0.3, 1), 1);
+}
+
+/**
  * Select relevant context sections based on task type and instruction
+ * Only includes sections with relevance >= RELEVANCE_THRESHOLD
  */
 export function selectRelevantSections(instruction: string, taskType: string): string[] {
-  const lower = instruction.toLowerCase();
-  const sections: string[] = [];
+  const sectionsWithScores: Array<{ name: string; score: number }> = [];
 
   for (const [name, config] of Object.entries(CONTEXT_SECTIONS)) {
-    if (config.keywords.some((kw) => lower.includes(kw))) {
-      sections.push(name);
+    const score = calculateSectionRelevance(instruction, config);
+    if (score >= RELEVANCE_THRESHOLD) {
+      sectionsWithScores.push({ name, score });
     }
   }
 
-  // Add default sections for certain task types
+  // Sort by relevance score descending
+  sectionsWithScores.sort((a, b) => b.score - a.score);
+
+  // Add default sections for certain task types if not already included
+  const sections = sectionsWithScores.map(s => s.name);
   if (taskType === 'security' && !sections.includes('security')) {
     sections.push('security');
   }
@@ -420,6 +445,28 @@ export function decideContextLevel(
 
   // Factor 7: Check if overhead fits within time budget
   const overheadRatio = estimatedOverhead / (timeoutSec * 1000);
+
+  // Time-critical tasks (<120s): cap overhead to TIME_CRITICAL_MAX_TOKENS
+  if (timeoutSec < 120) {
+    const cappedSections: string[] = [];
+    let tokenBudget = TIME_CRITICAL_MAX_TOKENS;
+    for (const section of relevantSections) {
+      const sectionTokens = CONTEXT_SECTIONS[section]?.tokens || 0;
+      if (tokenBudget - sectionTokens >= 0) {
+        cappedSections.push(section);
+        tokenBudget -= sectionTokens;
+      }
+    }
+    return {
+      level: cappedSections.length > 0 ? 'minimal' : 'none',
+      sections: cappedSections,
+      reason: `Time-critical task (<120s) - capped to ${TIME_CRITICAL_MAX_TOKENS} tokens`,
+      estimatedOverheadMs: calculateOverhead(cappedSections),
+      taskType,
+      timePressure,
+      historicalBenefit,
+    };
+  }
 
   if (timePressure === 'high' || overheadRatio > 0.1) {
     // Use minimal context - only most relevant section

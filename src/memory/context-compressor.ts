@@ -21,7 +21,7 @@ export interface CompressorConfig {
 }
 
 const DEFAULT_CONFIG: CompressorConfig = {
-  maxTokens: 2000,
+  maxTokens: 800,
   minSemanticPreservation: 0.85,
   compressionLevel: 'medium',
 };

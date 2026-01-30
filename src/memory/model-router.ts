@@ -1,0 +1,275 @@
+/**
+ * Model Routing Intelligence for UAM
+ *
+ * Routes tasks to the optimal model based on:
+ * - Task classification and difficulty
+ * - Model capability fingerprints (benchmarked data)
+ * - Latency/accuracy/cost tradeoffs
+ * - Fallback chains for resilience
+ *
+ * Based on BENCHMARK_ANALYSIS.md and MODEL_BENCHMARK_RESULTS.md data.
+ */
+
+import { classifyTask, type TaskClassification } from './task-classifier.js';
+
+export type ModelId = 'glm-4.7' | 'gpt-5.2' | 'claude-opus-4.5' | 'gpt-5.2-codex';
+
+export interface ModelFingerprint {
+  id: ModelId;
+  strengths: string[];
+  weaknesses: string[];
+  avgLatencyMs: number;
+  successRate: number;
+  costPerTask: number;
+  maxComplexity: 'easy' | 'medium' | 'hard';
+  bestCategories: string[];
+}
+
+export interface RoutingDecision {
+  primary: ModelId;
+  fallback: ModelId[];
+  reason: string;
+  estimatedLatencyMs: number;
+  estimatedSuccessRate: number;
+  estimatedCost: number;
+}
+
+export interface RoutingConfig {
+  preferLatency: boolean;
+  preferAccuracy: boolean;
+  maxCostPerTask: number;
+  maxLatencyMs: number;
+  availableModels: ModelId[];
+}
+
+const DEFAULT_CONFIG: RoutingConfig = {
+  preferLatency: false,
+  preferAccuracy: true,
+  maxCostPerTask: 0.05,
+  maxLatencyMs: 120000,
+  availableModels: ['glm-4.7', 'gpt-5.2', 'claude-opus-4.5', 'gpt-5.2-codex'],
+};
+
+const MODEL_FINGERPRINTS: Record<ModelId, ModelFingerprint> = {
+  'glm-4.7': {
+    id: 'glm-4.7',
+    strengths: ['speed', 'simple-code', 'patterns', 'typescript', 'bug-detection'],
+    weaknesses: ['complex-algorithms', 'long-context', 'multi-step-code', 'context-awareness'],
+    avgLatencyMs: 11373,
+    successRate: 0.625,
+    costPerTask: 0.001,
+    maxComplexity: 'medium',
+    bestCategories: ['coding', 'testing', 'debugging'],
+  },
+  'gpt-5.2': {
+    id: 'gpt-5.2',
+    strengths: ['balance', 'consistency', 'general-purpose', 'algorithm', 'multi-step'],
+    weaknesses: ['refactoring', 'latency-sensitive'],
+    avgLatencyMs: 21286,
+    successRate: 0.875,
+    costPerTask: 0.005,
+    maxComplexity: 'hard',
+    bestCategories: ['coding', 'security', 'file-ops', 'debugging'],
+  },
+  'claude-opus-4.5': {
+    id: 'claude-opus-4.5',
+    strengths: ['accuracy', 'complex-reasoning', 'edge-cases', 'error-handling', 'refactoring'],
+    weaknesses: ['latency', 'cost'],
+    avgLatencyMs: 26359,
+    successRate: 0.875,
+    costPerTask: 0.02,
+    maxComplexity: 'hard',
+    bestCategories: ['security', 'coding', 'sysadmin', 'debugging'],
+  },
+  'gpt-5.2-codex': {
+    id: 'gpt-5.2-codex',
+    strengths: ['code-specific', 'syntax-accuracy', 'context-awareness', 'all-difficulties'],
+    weaknesses: ['latency', 'cost', 'non-code-tasks'],
+    avgLatencyMs: 102399,
+    successRate: 1.0,
+    costPerTask: 0.01,
+    maxComplexity: 'hard',
+    bestCategories: ['coding', 'testing'],
+  },
+};
+
+const COMPLEXITY_RANK = { easy: 1, medium: 2, hard: 3 };
+
+/**
+ * Failure handlers for model-specific known issues
+ */
+const FAILURE_HANDLERS: Record<string, {
+  action: 'add_context' | 'reduce_context' | 'switch_model';
+  context?: string;
+  fallbackModel?: ModelId;
+}> = {
+  'gpt-5.2-codex:permission_denied': {
+    action: 'add_context',
+    context: 'Do not attempt file operations. Return code only.',
+    fallbackModel: 'gpt-5.2',
+  },
+  'glm-4.7:timeout': {
+    action: 'reduce_context',
+    fallbackModel: 'gpt-5.2',
+  },
+  'glm-4.7:context_overflow': {
+    action: 'reduce_context',
+    fallbackModel: 'gpt-5.2',
+  },
+};
+
+/**
+ * Score a model for a given task
+ */
+function scoreModel(
+  model: ModelFingerprint,
+  classification: TaskClassification,
+  difficulty: 'easy' | 'medium' | 'hard',
+  config: RoutingConfig,
+): number {
+  let score = 0;
+
+  // Category match bonus
+  if (model.bestCategories.includes(classification.category)) {
+    score += 30;
+  }
+
+  // Complexity match
+  if (COMPLEXITY_RANK[model.maxComplexity] >= COMPLEXITY_RANK[difficulty]) {
+    score += 20;
+  } else {
+    score -= 50; // Penalty for difficulty exceeding capability
+  }
+
+  // Success rate (0-25 points)
+  score += model.successRate * 25;
+
+  // Latency preference (0-15 points)
+  if (config.preferLatency) {
+    const latencyScore = Math.max(0, 1 - (model.avgLatencyMs / 120000));
+    score += latencyScore * 15;
+  }
+
+  // Accuracy preference bonus
+  if (config.preferAccuracy) {
+    score += model.successRate * 10;
+  }
+
+  // Cost constraint
+  if (model.costPerTask > config.maxCostPerTask) {
+    score -= 20;
+  }
+
+  // Latency constraint
+  if (model.avgLatencyMs > config.maxLatencyMs) {
+    score -= 30;
+  }
+
+  // Keyword match with model strengths
+  const taskKeywords = classification.keywords.map(k => k.toLowerCase());
+  for (const strength of model.strengths) {
+    if (taskKeywords.some(kw => strength.includes(kw) || kw.includes(strength))) {
+      score += 5;
+    }
+  }
+
+  return score;
+}
+
+/**
+ * Route a task to the best model
+ */
+export function routeTask(
+  instruction: string,
+  difficulty: 'easy' | 'medium' | 'hard' = 'medium',
+  config: Partial<RoutingConfig> = {},
+): RoutingDecision {
+  const cfg = { ...DEFAULT_CONFIG, ...config };
+  const classification = classifyTask(instruction);
+
+  // Score all available models
+  const scored = cfg.availableModels
+    .filter(id => MODEL_FINGERPRINTS[id])
+    .map(id => ({
+      id,
+      fingerprint: MODEL_FINGERPRINTS[id],
+      score: scoreModel(MODEL_FINGERPRINTS[id], classification, difficulty, cfg),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) {
+    return {
+      primary: 'gpt-5.2',
+      fallback: ['claude-opus-4.5'],
+      reason: 'No available models matched, defaulting to GPT 5.2',
+      estimatedLatencyMs: 21286,
+      estimatedSuccessRate: 0.875,
+      estimatedCost: 0.005,
+    };
+  }
+
+  const primary = scored[0];
+  const fallbacks = scored.slice(1).map(s => s.id);
+
+  return {
+    primary: primary.id,
+    fallback: fallbacks,
+    reason: `${primary.id} selected for ${classification.category}/${difficulty} task (score: ${primary.score.toFixed(0)})`,
+    estimatedLatencyMs: primary.fingerprint.avgLatencyMs,
+    estimatedSuccessRate: primary.fingerprint.successRate,
+    estimatedCost: primary.fingerprint.costPerTask,
+  };
+}
+
+/**
+ * Get failure handler for a model-specific error
+ */
+export function getFailureHandler(modelId: ModelId, errorType: string): typeof FAILURE_HANDLERS[string] | null {
+  return FAILURE_HANDLERS[`${modelId}:${errorType}`] || null;
+}
+
+/**
+ * Get model fingerprint
+ */
+export function getModelFingerprint(modelId: ModelId): ModelFingerprint | null {
+  return MODEL_FINGERPRINTS[modelId] || null;
+}
+
+/**
+ * Get all model fingerprints
+ */
+export function getAllModelFingerprints(): Record<ModelId, ModelFingerprint> {
+  return { ...MODEL_FINGERPRINTS };
+}
+
+/**
+ * Update model fingerprint with new benchmark data
+ */
+export function updateModelFingerprint(
+  modelId: ModelId,
+  updates: Partial<Pick<ModelFingerprint, 'avgLatencyMs' | 'successRate' | 'costPerTask'>>,
+): void {
+  const fp = MODEL_FINGERPRINTS[modelId];
+  if (!fp) return;
+
+  if (updates.avgLatencyMs !== undefined) {
+    // Exponential moving average
+    fp.avgLatencyMs = fp.avgLatencyMs * 0.7 + updates.avgLatencyMs * 0.3;
+  }
+  if (updates.successRate !== undefined) {
+    fp.successRate = fp.successRate * 0.7 + updates.successRate * 0.3;
+  }
+  if (updates.costPerTask !== undefined) {
+    fp.costPerTask = updates.costPerTask;
+  }
+}
+
+export const ModelRouter = {
+  routeTask,
+  getFailureHandler,
+  getModelFingerprint,
+  getAllModelFingerprints,
+  updateModelFingerprint,
+};
+
+export default ModelRouter;
