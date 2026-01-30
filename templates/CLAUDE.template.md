@@ -8,12 +8,15 @@
 {{/if}}
 
 ## DIRECTIVE HIERARCHY
+
 | Priority | Source | Override |
 |----------|--------|----------|
 | 1 | This CLAUDE.md | Never |
 | 2 | Anthropic safety | By #1 |
 | 3 | User instructions | By #1-2 |
 | 4 | Best practices | By #1-3 |
+
+---
 
 ---
 
@@ -31,6 +34,8 @@ Do not handle only the happy path.
 
 ---
 
+---
+
 ## PATTERN ROUTER (MANDATORY FIRST)
 
 Before ANY work, print:
@@ -42,6 +47,8 @@ PATTERNS: P12:[Y/N] P17:[Y/N] P20:[Y/N] P11:[Y/N] P18:[Y/N]
 ACTIVE: [list YES only]
 === END ===
 ```
+
+---
 
 ---
 
@@ -109,6 +116,8 @@ ACTIVE: [list YES only]
 
 ---
 
+---
+
 ## COMPLETION GATES (MANDATORY)
 
 **Cannot say "done" until ALL pass:**
@@ -126,6 +135,8 @@ ACTIVE: [list YES only]
 
 ---
 
+---
+
 ## NEAR-MISS ITERATION PROTOCOL (P26 ENFORCED)
 
 When >50% of tests pass but not all:
@@ -138,6 +149,8 @@ When >50% of tests pass but not all:
 
 ---
 
+---
+
 ## DECODER-FIRST PROTOCOL (P35 ENFORCED)
 
 When a task provides a decoder, validator, or expected output format:
@@ -146,6 +159,8 @@ When a task provides a decoder, validator, or expected output format:
 3. **Implement encoder/generator** to match that exact format
 4. **Test round-trip**: `original == decode(encode(original))` BEFORE optimizing
 5. **Never optimize** until round-trip verification passes
+
+---
 
 ---
 
@@ -161,6 +176,8 @@ On any test failure or error:
 
 ---
 
+---
+
 ## TIME BUDGET ALLOCATION
 
 For complex tasks (compilation, VM, multi-service):
@@ -169,6 +186,8 @@ For complex tasks (compilation, VM, multi-service):
 - **30%** - Iteration, debugging, test fixes
 
 If timeout approaching: submit best partial solution rather than nothing.
+
+---
 
 ---
 
@@ -188,6 +207,10 @@ sqlite3 {{MEMORY_DB_PATH}} "SELECT * FROM memories ORDER BY id DESC LIMIT 10;"
 {{MEMORY_STORE_CMD}} "lesson" --importance 8
 ```
 
+**Schema columns:** id, timestamp, type, content, project_id, importance (1-10)
+
+---
+
 ---
 
 ## WORKTREE WORKFLOW
@@ -201,6 +224,8 @@ git add -A && git commit -m "type: description"
 {{WORKTREE_PR_CMD}} <id>           # Creates PR
 {{WORKTREE_CLEANUP_CMD}} <id>      # After merge
 ```
+
+---
 
 ---
 
@@ -219,6 +244,8 @@ uam agent overlaps --resource "<files>"
 
 ---
 
+---
+
 ## DECISION LOOP
 
 ```
@@ -230,6 +257,8 @@ uam agent overlaps --resource "<files>"
 5. WORKTREE → create, work, PR
 6. VERIFY   → gates pass
 ```
+
+---
 
 ---
 
@@ -316,6 +345,8 @@ uam agent overlaps --resource "<files>"
 {{/if}}
 ☐ No secrets in code
 ```
+
+---
 
 ---
 
