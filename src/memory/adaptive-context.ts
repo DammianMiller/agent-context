@@ -1,7 +1,7 @@
 /**
  * Hybrid Adaptive Context Selector for UAM (Option 4)
  * 
- * VERSION: 1.9.0 - 10 Model Outcome Success Optimizations
+ * VERSION: 2.0.0 - 21 Model Outcome Success Optimizations
  *
  * Combines task classification with time-budget awareness, runtime monitoring,
  * and historical benefit tracking for optimal context loading decisions.

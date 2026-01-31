@@ -1,4 +1,4 @@
-<!-- CLAUDE.md v10.15-opt - 10 Model Outcome Success Optimizations -->
+<!-- CLAUDE.md v2.0.0 - 21 Model Outcome Success Optimizations -->
 <coding_guidelines>
 
 # {{PROJECT_NAME}} - Autonomous Agent Guide
@@ -18,288 +18,269 @@
 
 ---
 
-## CONTEXT PRIORITY (Optimization #2)
+## ENVIRONMENT SNAPSHOT (Optimization #21 - RUN FIRST)
 
-For time-sensitive tasks (scheduling, logic puzzles, math, <60s timeout):
-- SKIP pattern analysis, go STRAIGHT to implementation
-- Pattern Router is OPTIONAL for pure reasoning tasks
+**First command in ANY task:**
+```bash
+python3 --version 2>/dev/null; which pip3 gcc g++ make node npm git curl 2>/dev/null | head -10
+```
+Takes <2s, prevents 30-60s of tool discovery later.
+
+---
+
+## CONTEXT BUDGET CONTROL (Optimization #14)
+
+| Task Size | Action |
+|-----------|--------|
+| Simple (<200 words, 1 file) | Skip Pattern Router, go direct |
+| Medium (multi-file, tests) | 1-line classification only |
+| Complex (multi-service) | Full router with patterns |
+| Timeout <120s | Skip all protocol blocks |
 
 ---
 
 ## VERIFIER-FIRST PRINCIPLE (Optimization #5 - HIGHEST IMPACT)
 
-**37% of failures are format/output mismatches. This fixes them.**
+**37% of failures are format/output mismatches.**
 
 BEFORE implementing ANY task with tests/verifier:
-1. **READ the verifier/test code FIRST** - understand exact expectations
+1. **READ the verifier/test code FIRST**
 2. **EXTRACT**: expected file paths, output format, return values
 3. **CREATE stub outputs** matching expected format immediately
-4. **THEN implement** the actual logic
-5. **RUN verifier after EACH change**
+4. **RUN verifier after EACH change**
 
 ```bash
-# Example: Task expects cli_tool and output.txt
 echo '#!/usr/bin/env python3\nprint("stub")' > cli_tool && chmod +x cli_tool
-echo '0' > output.txt
-./verifier.sh  # Confirm files detected BEFORE implementing
+./verifier.sh  # Confirm detected BEFORE implementing
+```
+
+---
+
+## DEPENDENCY PRE-FLIGHT (Optimization #12)
+
+**Before writing code, check and install:**
+```bash
+# Check critical deps
+which python3 pip3 gcc make cmake node npm git curl wget || echo "MISSING"
+# Install missing (budget 20% of time for setup)
+pip3 install -q numpy scipy 2>/dev/null  # Example
 ```
 
 ---
 
 ## INSTANT REFUSE CHECK (Optimization #6)
 
-Before Pattern Router, check these IMPOSSIBLE conditions:
+Before Pattern Router, check IMPOSSIBLE conditions:
 - "implement GPT/LLM in <10KB" → IMPOSSIBLE (weights exceed limit)
 - "compress X to Y bytes" where entropy(X) > Y → IMPOSSIBLE (Shannon limit)
 - "solve NP-hard optimally at scale" → IMPOSSIBLE (complexity)
 
-If matched: Create `IMPOSSIBLE.md` with explanation, move on. Do NOT attempt.
+If matched: Create `IMPOSSIBLE.md`, move on. Do NOT attempt.
 
 ---
 
-## CODE FIELD
+## DOMAIN RESEARCH FIRST (Optimization #16)
 
-**Before writing code:** State assumptions, bound scope, identify edge cases.
-
-```
-Do not write code before stating assumptions.
-Do not claim correctness you haven't verified.
-Do not handle only the happy path.
-```
-
-**Output:** Assumptions → Code (smaller than expected) → "Handles/Does NOT handle"
+**For unfamiliar domains (games, crypto, rendering, compilers):**
+1. Search for EXISTING solutions/examples first (10% time budget)
+2. Adapt proven approach rather than inventing from scratch
+3. Only implement from theory if no examples found
 
 ---
 
-## PATTERN ROUTER (MANDATORY FIRST)
+## PATTERN ROUTER (Optimization #20 - CONDITIONAL)
 
-Before ANY work, print:
+**Simple tasks:** Skip entirely
+**Medium tasks:** Print only:
 ```
-=== PATTERN ROUTER ===
-Task: [summary]
-Classification: [file-creation|constraint|adversarial|pipeline|impossible]
-PATTERNS: P12:[Y/N] P17:[Y/N] P20:[Y/N] P11:[Y/N] P18:[Y/N]
-ACTIVE: [list YES only]
-=== END ===
+=== TASK: [summary] | CLASS: [type] | ACTIVE: [P-numbers] ===
 ```
-
-**P11 ENFORCEMENT (Optimization #3):** If task involves chess/stats/crypto/compression → P11=Y is MANDATORY
-- Chess: python-chess + stockfish (NOT custom FEN parsing)
-- Statistics: scipy.stats, R CRAN packages (NOT custom implementations)
-- Compression: zlib, lz4, brotli (NOT custom Huffman/arithmetic)
-- Crypto: hashlib, pycryptodome (NOT custom implementations)
+**Complex tasks:** Full router with pattern listing
 
 ---
 
-## PATTERNS REFERENCE
+## CORE PATTERNS (P1-P11)
 
-### Core (P1-P11)
 | P | Name | Trigger | Action |
 |---|------|---------|--------|
-| 1 | EnvIsolation | Any task | Check deps: `which tool` before use |
-| 2 | Recipe | Complex task | Convert to numbered steps |
+| 1 | EnvIsolation | Any task | `which tool` before use |
 | 3 | StateProtect | Modifies config/db | `cp file file.bak` FIRST |
-| 4 | ToolSpec | Ambiguous how | Specify exact tool+flags |
 | 5 | Impossible | Compression/ML/search | Detect early, refuse |
-| 6 | RecencyBias | Critical rules | Put at END of context |
-| 7 | Classify | Any task | State-sensitive→backup, Tool→specify |
 | 8 | CLIoverLib | Uncertain env | `subprocess` > library import |
-| 9 | FormatPipeline | Non-text data | Convert→standard format first |
-| 10 | Whitelist | Security filter | Allow-list ONLY, never blacklist |
-| 11 | PreComputed | Chess/crypto/ML | **MANDATORY**: Use library, NOT custom |
+| 11 | PreComputed | Chess/crypto/ML | **Use library, NOT custom**: python-chess, scipy, zlib, hashlib |
 
-### Output (P12-P16)
+---
+
+## OUTPUT PATTERNS (P12-P16)
+
 | P | Name | Trigger | Action |
 |---|------|---------|--------|
-| 12 | **OEV** | Creates files | `ls -la` verify ALL outputs exist before done |
-| 13 | IRL | Tests partial pass | Fix specific failure, re-run, iterate |
-| 14 | OFV | Format specified | Validate output matches spec |
-| 15 | ER | Exception thrown | Read trace, fix error, re-run |
-| 16 | **TFE+** | Any output task | Create WORKING minimal outputs FIRST, then enhance |
+| 12 | **OEV** | Creates files | `ls -la` verify ALL outputs exist |
+| 13 | IRL | Tests partial pass | Fix specific failure, re-run |
+| 16 | **TFE+** | Any output | Create WORKING minimal outputs FIRST |
 
-### Constraint (P17-P20)
+---
+
+## CONSTRAINT PATTERNS (P17-P20)
+
 | P | Name | Trigger | Action |
 |---|------|---------|--------|
-| 17 | **CE** | "exactly/only/single/must" | Extract constraints, print checklist |
-| 18 | MTP | Multi-step | Identify tool per stage, chain |
-| 19 | ITR+ | Impossible markers | REFUSE immediately, create IMPOSSIBLE.md |
+| 17 | **CE** | "exactly/only/must" | Extract constraints, print checklist |
 | 20 | **AT** | "bypass/break/exploit" | Attacker mindset, enumerate vectors |
 
-### Domain (P21-P26)
+---
+
+## DOMAIN PATTERNS (P21-P26)
+
 | P | Name | Trigger | Action |
 |---|------|---------|--------|
-| 21 | CEI | Chess | Use Stockfish: `echo "position fen $FEN\ngo depth 20" \| stockfish` |
-| 22 | GRF | Git recovery | `cp -r .git .git.bak` FIRST, then `git fsck` |
-| 23 | CID | Compress impossible | Refuse if target < Shannon limit |
-| 24 | PCC | Polyglot | Search existing examples first |
-| 25 | SCP | Multi-service | Configure in dependency order, test each |
-| 26 | NMI | >50% tests pass | Focus on specific failures, 30% time reserved |
+| 21 | CEI | Chess | Use Stockfish, NOT custom FEN parsing |
+| 22 | GRF | Git recovery | `cp -r .git .git.bak` FIRST |
+| 26 | **NMI** | >50% tests pass | **MANDATORY**: Focus on specific failures |
 
-### Verification (P27-P31)
-| P | Name | Trigger | Action |
-|---|------|---------|--------|
-| 27 | ODC | Output dir constraint | Remove non-required files before done |
-| 28 | SST | Service task | `curl` test BEFORE claiming done |
-| 29 | MSD | "all/both/every" | Find ALL solutions, not just first |
-| 30 | PTT | "% threshold" | Iterate until threshold met |
-| 31 | RTV | Transform task | Verify round-trip: `original == decompress(compress(original))` |
+---
 
-### Execution (P32-P36)
+## EXECUTION PATTERNS (P32-P36)
+
 | P | Name | Trigger | Action |
 |---|------|---------|--------|
 | 32 | CEV | CLI tool | Test `./script` not `python script` |
-| 33 | NST | Numerical | Multiple seeds, edge cases, tolerance 1e-6 |
-| 34 | ISP | Image analysis | Use recognition tools, not reasoning |
-| 35 | **DFA** | Encode+decoder given | Read decoder FIRST, match format exactly, test round-trip BEFORE optimizing |
+| 35 | **DFA** | Decoder given | Read decoder FIRST, test round-trip |
 | 36 | CDR | Competition | Research strategies BEFORE implementing |
 
 ---
 
-## OUTPUT-FIRST DEVELOPMENT (Optimization #8 - P16 Upgraded)
+## AGGRESSIVE NEAR-MISS ENFORCEMENT (Optimization #11 - CRITICAL)
 
-**BEFORE complex implementation:**
-1. Create ALL expected output files with minimal valid content
-2. Run verifier to confirm files are detected
-3. THEN replace with real implementation
-4. Run verifier after EACH replacement
+**26% of failures are near-misses (60-89% tests pass). This fixes them.**
+
+**HARD GATES - Cannot proceed if violated:**
+1. **If pass rate >60% but <100%: You are NOT done. ITERATE.**
+2. **Print after EVERY test run:** `TESTS: X/Y passed (Z% - need 100%)`
+3. **If remaining failures ≤2: Enter SINGLE-FAILURE-FOCUS mode**
+4. **NEVER say "done" with passing tests <100%**
+
+**Time Budget:**
+```
+Total: 300s → Reserve 90s minimum for iteration
+Total: 120s → Reserve 36s minimum for iteration
+Total: 60s  → Reserve 18s minimum for iteration
+```
+
+---
+
+## SINGLE-ERROR FOCUS MODE (Optimization #13 - CRITICAL)
+
+**When exactly 1-2 tests fail:**
+1. **Copy the FULL failing test function source**
+2. **Copy the FULL error trace**
+3. **Diff:** What does test expect vs what you produce?
+4. **Fix ONLY that delta. Touch NOTHING else.**
+5. **Re-run immediately after fix**
 
 ```bash
-# Example: Task says "create cli_tool and prediction.txt"
-echo '#!/usr/bin/env python3\nprint("hello")' > cli_tool && chmod +x cli_tool
-echo '0.5' > prediction.txt
-./verifier.sh  # Confirm both detected
-# THEN implement real logic
+# NEVER do broad refactoring when close to passing
+# ONLY fix the specific assertion that fails
+```
+
+---
+
+## TEST OUTPUT DIFFING (Optimization #15)
+
+**When test fails with wrong output:**
+```bash
+# Save and diff actual vs expected
+./program > /tmp/actual.out 2>&1
+diff expected.out /tmp/actual.out | head -20
+# Fix ONLY the differences shown
 ```
 
 ---
 
 ## COMPLETION GATES (MANDATORY)
 
-**Cannot say "done" until ALL pass:**
-
 | Gate | Check | If Fail |
 |------|-------|---------|
-| 1 | Output files exist | CREATE immediately |
+| 1 | Output files exist (`ls -la`) | CREATE immediately |
 | 2 | Constraints satisfied | FIX violations |
-| 3 | Tests 100% pass | ITERATE |
-
-```bash
-# Gate 1: for f in $EXPECTED; do [ -f "$f" ] || echo "MISSING: $f"; done
-# Gate 3: {{TEST_COMMAND}}
-```
+| 3 | **Tests 100% pass** | **ITERATE - not done** |
 
 ---
 
-## MANDATORY PRE-COMPLETION CHECKLIST (Optimization #1)
+## PRE-COMPLETION CHECKLIST (Optimization #1)
 
-**BEFORE saying "done", PRINT this checklist:**
+**PRINT before saying "done":**
 ```
-=== COMPLETION VERIFICATION ===
-☑/☐ All output files verified with `ls -la`
-☑/☐ Tests run and all pass
+=== COMPLETION ===
+☑/☐ All outputs verified: `ls -la`
+☑/☐ Tests: X/Y passed (must be 100%)
+☑/☐ If CLI: tested as `./script`
 ☑/☐ If compression: round-trip tested
-☑/☐ If CLI tool: tested as `./script` not `python script`
-☑/☐ Constraints from task satisfied
 === END ===
 ```
 
-**If ANY box is ☐, FIX IT before proceeding.**
+**If ANY ☐: FIX before proceeding.**
 
 ---
 
-## FAILURE TRIAGE LOOP (Optimization #4 - Prescriptive Iteration)
+## FAILURE TRIAGE (Optimization #4)
 
-When tests fail:
-1. **Copy EXACT error message** (not paraphrase)
-2. **Classify error type:**
-   - `missing-file` → create it immediately
-   - `wrong-format` → read expected format from test/verifier
-   - `wrong-value` → check algorithm logic, add debug output
-   - `timeout` → reduce scope, submit partial
-   - `dependency` → pip install / apt-get
-3. **Apply specific fix** for that error type
-4. **Re-run ONLY the failing test**
-5. **NEVER refactor passing code** while fixing failures
+| Error Type | Instant Fix |
+|------------|-------------|
+| `missing-file` | Create it immediately |
+| `wrong-format` | Read expected format from test |
+| `wrong-value` | Add debug output, check algorithm |
+| `timeout` | Reduce scope, submit partial |
+| `ModuleNotFoundError: X` | `pip install X` |
+| `Permission denied` | `chmod +x file` |
+| `command not found: X` | `apt-get install X` |
 
----
-
-## NEAR-MISS ITERATION PROTOCOL (P26 ENFORCED - MANDATORY)
-
-**CRITICAL: This protocol converted 2 failing tasks to passing in v1.3.0**
-
-When >50% of tests pass but not all:
-1. **STOP and assess** - You are close to success, do NOT restart
-2. **Read EXACT failure message** for each failing test - copy the error verbatim
-3. **Fix ONLY the specific failing test** - do not refactor passing code
-4. **Re-run tests IMMEDIATELY** after each single fix
-5. **MANDATORY: Reserve 30% of time budget** for this iteration loop
-6. **Repeat** until 100% pass or time exhausted
-7. **Never give up** on a task that is >50% passing - small fixes flip outcomes
-
-**Time Budget Enforcement:**
-```
-Total time: 300s → Iteration budget: 90s minimum
-Total time: 120s → Iteration budget: 36s minimum
-Total time: 60s  → Iteration budget: 18s minimum
-```
+**NEVER refactor passing code while fixing failures.**
 
 ---
 
-## ERROR FAST-PATHS (Optimization #10)
+## PARTIAL CREDIT MAXIMIZATION (Optimization #17)
 
-| Error Pattern | Instant Fix |
-|---------------|-------------|
-| ModuleNotFoundError: X | `pip install X` |
-| Permission denied | `chmod +x file` |
-| command not found: X | `apt-get install X` or `which X` |
-| SyntaxError: shebang | Add `#!/usr/bin/env python3` as line 1 |
-| JSONDecodeError | Validate with `python -m json.tool file.json` |
-| Connection refused | Check service running, correct port |
-| No such file or directory | Create the file/directory first |
+**When time running out (last 20%):**
+1. Do NOT start new approaches
+2. Ensure ALL passing tests still pass (regression check)
+3. Make ONE targeted fix for highest-likelihood failing test
+4. Submit current state rather than nothing
 
 ---
 
-## DECODER-FIRST & ROUND-TRIP PROTOCOL (P35 ENFORCED - MANDATORY)
+## DECODER-FIRST PROTOCOL (P35 - MANDATORY)
 
-**CRITICAL: write-compressor failed 2/3 tests due to decoder format mismatch**
-
-When a task provides a decoder, validator, or expected output format:
-1. **READ the decoder/validator source code FIRST** before writing any implementation
-2. **Extract the exact format** it expects (headers, encoding, byte order, etc.)
-3. **Implement encoder/generator** to match that exact format
-4. **Test round-trip IMMEDIATELY**: `original == decode(encode(original))`
-5. **Never optimize** until round-trip verification passes
-6. **If round-trip fails**: debug the format mismatch, do NOT optimize for size/speed
+When a task provides a decoder/validator:
+1. **READ decoder source FIRST**
+2. **Extract exact format** (headers, encoding, byte order)
+3. **Test round-trip IMMEDIATELY**: `original == decode(encode(original))`
+4. **Never optimize until round-trip passes**
 
 ```bash
-# For CLI tools (P32): Always verify execution method matches verifier
-chmod +x ./script.py       # Make executable
-head -1 ./script.py        # Verify shebang exists: #!/usr/bin/env python3
-./script.py --help         # Test as verifier runs it (NOT python3 script.py)
+chmod +x ./script.py
+head -1 ./script.py  # Verify shebang: #!/usr/bin/env python3
+./script.py --help   # Test as verifier runs it
 ```
 
 ---
 
-## ERROR RECOVERY ESCALATION
+## ERROR RECOVERY
 
-On any test failure or error:
 1. **Read exact error message** - do not guess
-2. **If same error twice**: change approach completely, do not retry same fix
-3. **If dependency missing**: install it (`pip install`, `npm install`, `apt-get`)
-4. **If permission denied**: use alternative path or `chmod`
-5. **If timeout**: reduce scope, submit partial solution
-6. **Never repeat a failed command** without modification
+2. **Same error twice?** Change approach completely
+3. **Dependency missing?** Install it
+4. **Timeout approaching?** Submit best partial
 
 ---
 
-## TIME BUDGET ALLOCATION
+## TIME BUDGET
 
-For complex tasks (compilation, VM, multi-service):
-- **20%** - Environment assessment (deps, tools, constraints)
-- **50%** - Core implementation
-- **30%** - Iteration, debugging, test fixes
-
-If timeout approaching: submit best partial solution rather than nothing.
+| Phase | Allocation |
+|-------|------------|
+| Environment setup | 20% |
+| Core implementation | 50% |
+| **Iteration/debugging** | **30% (MANDATORY)** |
 
 ---
 
@@ -312,42 +293,25 @@ L3 Semantic │ {{LONG_TERM_BACKEND}}│ search                   │ ~50ms
 L4 Knowledge│ SQLite entities/rels │ graph                    │ <20ms
 ```
 
-**Commands:**
-```bash
-sqlite3 {{MEMORY_DB_PATH}} "SELECT * FROM memories ORDER BY id DESC LIMIT 10;"
-{{MEMORY_QUERY_CMD}} "keywords"
-{{MEMORY_STORE_CMD}} "lesson" --importance 8
-```
+---
+
+## FAILURE MEMORY (Optimization #19)
+
+**If this exact task was attempted before:**
+1. Load previous failure report from memory
+2. Do NOT use the approach that failed
+3. Start from the approach that got closest to success
 
 ---
 
 {{#unless IS_BENCHMARK}}
 ## WORKTREE WORKFLOW
 
-**ALL changes use worktrees. NO EXCEPTIONS.**
-
 ```bash
-{{WORKTREE_CREATE_CMD}} <slug>     # Creates {{WORKTREE_DIR}}/NNN-<slug>/
-cd {{WORKTREE_DIR}}/NNN-<slug>/
+{{WORKTREE_CREATE_CMD}} <slug>     # Creates worktree
 git add -A && git commit -m "type: description"
 {{WORKTREE_PR_CMD}} <id>           # Creates PR
-{{WORKTREE_CLEANUP_CMD}} <id>      # After merge
 ```
-
----
-
-## MULTI-AGENT
-
-**Before claiming work:**
-```bash
-uam agent overlaps --resource "<files>"
-```
-
-| Risk | Action |
-|------|--------|
-| none/low | Proceed |
-| medium | Announce, coordinate |
-| high/critical | Wait or split |
 
 ---
 
@@ -357,29 +321,17 @@ uam agent overlaps --resource "<files>"
 |-------|---------|
 | security-auditor | OWASP, secrets, injection |
 | code-quality-guardian | SOLID, complexity |
-| performance-optimizer | Algorithms, memory |
-| documentation-expert | JSDoc, README |
 | debug-expert | Dependency conflicts |
 | sysadmin-expert | Kernel, QEMU, networking |
-| ml-training-expert | Model training, MTEB |
 
 {{/unless}}
 ---
 
 {{#if HAS_INFRA}}
-## INFRASTRUCTURE (IaC PARITY REQUIRED)
+## INFRASTRUCTURE
 
 **Secrets in GitHub → use pipelines for secret-dependent ops.**
-
-| Task | Pipeline |
-|------|----------|
-| Terraform | `iac-terraform-cicd.yml` |
-| kubectl ops | `ops-approved-operations.yml` |
-| One-time | `ops-create-ephemeral.yml` |
-
-**Two-phase:** Local proof (no secrets) → IaC parity (via pipeline)
-
-**PROHIBITED locally:** `terraform apply`, `kubectl apply/delete`, `kubectl create secret`
+**PROHIBITED locally:** `terraform apply`, `kubectl apply/delete`
 
 {{/if}}
 ---
@@ -391,8 +343,6 @@ uam agent overlaps --resource "<files>"
 {{BUILD_COMMAND}}    # Build
 {{LINT_COMMAND}}     # Lint
 ```
-
-**Paths:** Memory: `{{MEMORY_DB_PATH}}` | Skills: `{{SKILLS_PATH}}` | Droids: `{{DROIDS_PATH}}`
 
 ---
 
@@ -410,13 +360,6 @@ uam agent overlaps --resource "<files>"
 ## Architecture
 {{{ARCHITECTURE_OVERVIEW}}}
 {{/if}}
-
-{{#if ESSENTIAL_COMMANDS}}
-## Commands
-```bash
-{{{ESSENTIAL_COMMANDS}}}
-```
-{{/if}}
 {{/if}}
 
 ---
@@ -425,15 +368,10 @@ uam agent overlaps --resource "<files>"
 ## COMPLETION CHECKLIST
 
 ```
-☐ Tests pass
+☐ Tests 100% pass
 ☐ Lint/typecheck pass
 ☐ Worktree used (not {{DEFAULT_BRANCH}})
-☐ Memory updated
 ☐ PR created
-☐ Reviews passed
-{{#if HAS_INFRA}}
-☐ IaC parity verified
-{{/if}}
 ☐ No secrets in code
 ```
 
@@ -443,15 +381,9 @@ uam agent overlaps --resource "<files>"
 
 ```
 MERGE → DEPLOY → MONITOR → FIX (iterate until 100%)
-
-1. MERGE: PR approved → merge to {{DEFAULT_BRANCH}} → delete branch
-2. DEPLOY: CI/CD runs → check status → confirm live
-3. MONITOR: Check logs → verify functionality → smoke tests
-4. FIX: New worktree → fix → GOTO 1
-5. COMPLETE: Update memory → close tasks
 ```
 
-**Never "done" until:** PR merged + deployed + verified working
+**Never "done" until:** PR merged + deployed + verified
 {{/unless}}
 
 ---
@@ -477,28 +409,16 @@ MERGE → DEPLOY → MONITOR → FIX (iterate until 100%)
 
 ---
 
-## FINAL DIRECTIVES (Optimization #7 - HIGHEST PRIORITY, READ LAST)
+## FINAL DIRECTIVES (HIGHEST PRIORITY - READ LAST)
 
-1. **READ verifier/test BEFORE implementing** - understand exact expected format
-2. **`ls -la` ALL outputs BEFORE saying done** - 37% of failures are missing files
-3. **If >50% tests pass, ITERATE** - do NOT restart, fix specific failures
-4. **Use libraries, not custom implementations** - python-chess, scipy, zlib
-5. **When same error twice, CHANGE APPROACH COMPLETELY** - don't retry same fix
+1. **READ verifier/test BEFORE implementing**
+2. **`ls -la` ALL outputs BEFORE saying done**
+3. **If >50% tests pass, ITERATE** - do NOT restart
+4. **Use libraries, not custom** - python-chess, scipy, zlib
+5. **Same error twice = CHANGE APPROACH**
+6. **NEVER say done if tests <100%** - iterate until pass
 
-**P17 Active? Print:**
-```
-=== CONSTRAINTS ===
-☐ constraint1  ☐ constraint2
-☑ constraint1: PASS/FAIL
-=== END ===
-```
-
-**P20 Active? Print:**
-```
-=== ADVERSARIAL ===
-Target: [filter/protection]
-Vectors: case, encoding, null, context-break
-=== END ===
-```
+**P17 Active?** Print: `=== CONSTRAINTS: ☐ c1 ☐ c2 → ☑ c1: PASS ===`
+**P20 Active?** Print: `=== ADVERSARIAL: Target: [X] Vectors: case,encoding,null ===`
 
 </coding_guidelines>
