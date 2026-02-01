@@ -385,9 +385,14 @@ class UAMAgent(ClaudeCode):
         # Call parent's create_run_agent_commands with enhanced instruction
         escaped_instruction = shlex.quote(enhanced_instruction)
 
+        # Get base URL, but filter out localhost URLs since they won't work inside Docker
+        base_url = os.environ.get("ANTHROPIC_BASE_URL", None)
+        if base_url and ("localhost" in base_url or "127.0.0.1" in base_url):
+            base_url = None  # Can't reach host's localhost from Docker container
+        
         env = {
             "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", ""),
-            "ANTHROPIC_BASE_URL": os.environ.get("ANTHROPIC_BASE_URL", None),
+            "ANTHROPIC_BASE_URL": base_url,
             "CLAUDE_CODE_OAUTH_TOKEN": os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", ""),
             "CLAUDE_CODE_MAX_OUTPUT_TOKENS": os.environ.get(
                 "CLAUDE_CODE_MAX_OUTPUT_TOKENS", None
