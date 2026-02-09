@@ -1,0 +1,6 @@
+{
+  "memory": "uam memory query \"$1\"",
+  "store": "uam memory store \"$1\" --importance 7",
+  "worktree": "uam worktree create \"$1\"",
+  "status": "uam memory status"
+}
