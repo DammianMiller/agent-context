@@ -1,5 +1,5 @@
 <!--
-  CLAUDE.md Universal Template - v10.18-opt
+  CLAUDE.md Universal Template - v10.19-opt
 
   Core Variables:
     {{PROJECT_NAME}}, {{DESCRIPTION}}, {{DEFAULT_BRANCH}}, {{STRUCTURE_DATE}}
@@ -163,7 +163,7 @@ Secrets live in GitHub - use pipelines for secret-dependent operations.
 
 ## UNIVERSAL AGENT PATTERNS
 
-**Thirty-six patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
+**Forty-two patterns proven to improve LLM agent reliability. Apply to ALL task execution.**
 
 ### Pattern 1: Environment Isolation
 Code installed during execution may NOT persist across phases (agent -> test -> deploy).
@@ -206,7 +206,7 @@ LLMs weight information at the END of context more heavily.
 - Repeat critical instructions if essential
 
 ### Pattern 7: Task Classification
-Different task types require different strategies.
+Different task types require different strategies. See also P40 (Adaptive Reasoning Depth).
 
 | Category | Strategy |
 |----------|----------|
@@ -214,6 +214,8 @@ Different task types require different strategies.
 | Recipe-following | Step-by-step commands |
 | Tool-dependent | Specify exact tool + flags |
 | Research/exploration | Parallel searches |
+| Complex/ambiguous | P38 Branching Exploration |
+| Multi-file change | P41 Atomic Task Loop |
 
 ### Pattern 8: CLI over Libraries
 When environment dependencies are uncertain, prefer subprocess + CLI over library imports.
@@ -495,6 +497,232 @@ Competitive tasks benefit from researching domain-specific winning strategies.
 
 ---
 
+## ADVANCED REASONING PATTERNS
+
+**Six patterns derived from state-of-the-art LLM optimization research (2025-2026). Address reasoning depth, self-verification, branching exploration, feedback grounding, and task atomization.**
+
+### Pattern 37: Pre-Implementation Verification (PIV)
+**CRITICAL: Prevents wrong-approach waste — the #1 cause of wasted compute.**
+
+After planning but BEFORE writing any code, explicitly verify your approach:
+
+**Detection**: Any implementation task (always active for non-trivial changes)
+
+**Protocol**:
+```
+=== PRE-IMPLEMENTATION VERIFY ===
+1. ROOT CAUSE: Does this approach address the actual root cause, not a symptom?
+2. EXISTING TESTS: Will this break any existing passing tests?
+3. SIMPLER PATH: Is there a simpler approach I'm overlooking?
+4. ASSUMPTIONS: What am I assuming about the codebase that I haven't verified?
+5. SIDE EFFECTS: What else does this change affect?
+=== VERIFIED: [proceed/revise] ===
+```
+
+**If ANY answer raises doubt**: STOP. Re-read the problem. Revise approach before coding.
+
+*Research basis: CoT verification (+4.3% accuracy), Reflexion framework (+18.5%), SEER adaptive reasoning (+4-9%)*
+
+### Pattern 38: Branching Exploration (BE)
+For complex or ambiguous problems, explore multiple approaches before committing.
+
+**Detection**: Problem has multiple valid approaches, ambiguous requirements, or high complexity
+
+**Protocol**:
+1. **Generate 2-3 candidate approaches** (brief description, not full implementation)
+2. **Evaluate each** against: simplicity, correctness likelihood, test-compatibility, side-effect risk
+3. **Select best** with explicit reasoning
+4. **Commit fully** to selected approach — no mid-implementation switching
+5. **If selected approach fails**: backtrack to step 1, eliminate failed approach, try next
+
+**NEVER**: Start coding the first approach that comes to mind for complex problems.
+**ALWAYS**: Spend 5% of effort exploring alternatives to save 50% on wrong-path recovery.
+
+*Research basis: MCTS-guided code generation (RethinkMCTS: 70%→89% pass@1), Policy-Guided Tree Search*
+
+### Pattern 39: Execution Feedback Grounding (EFG)
+Learn from test failures systematically — don't just fix, understand and remember.
+
+**Detection**: Any test failure or runtime error during implementation
+
+**Protocol**:
+1. **Categorize the failure** using the Failure Taxonomy (see below)
+2. **Identify root cause** (not just the symptom the error message shows)
+3. **Fix with explanation**: What was wrong, why, and what the fix addresses
+4. **Store structured feedback** in memory:
+   ```bash
+   sqlite3 ./{{MEMORY_DB_PATH}} "INSERT INTO memories (timestamp,type,content) VALUES (datetime('now'),'failure_analysis','type:<category>|cause:<root_cause>|fix:<what_fixed>|file:<filename>');"
+   ```
+5. **Query before similar tasks**: Before implementing, check memory for past failures in same area
+
+**Failure Taxonomy** (use for categorization):
+| Type | Description | Recovery Strategy |
+|------|-------------|-------------------|
+| `dependency_missing` | Import/module not found | Install or use stdlib alternative |
+| `wrong_approach` | Fundamentally incorrect solution | P38 Branching - try different approach |
+| `format_mismatch` | Output doesn't match expected format | P14 OFV - re-read spec carefully |
+| `edge_case` | Works for happy path, fails on edge | Add boundary checks, test with extremes |
+| `state_mutation` | Unexpected side effect on shared state | Isolate mutations, use copies |
+| `concurrency` | Race condition or timing issue | Add locks, use sequential fallback |
+| `timeout` | Exceeded time/resource limit | Optimize algorithm, reduce scope |
+| `environment` | Works locally, fails in target env | P1 Environment Isolation checks |
+
+*Research basis: RLEF/RLVR (RL from Execution Feedback), verifiable rewards for coding agents*
+
+### Pattern 40: Adaptive Reasoning Depth (ARD)
+Match reasoning effort to task complexity — don't over-think simple tasks or under-think hard ones.
+
+**Detection**: Applied automatically at Pattern Router stage
+
+**Complexity Classification**:
+| Complexity | Indicators | Reasoning Protocol |
+|-----------|------------|-------------------|
+| **Simple** | Single file, clear spec, known pattern, <20 lines | Direct implementation. No exploration phase. |
+| **Moderate** | Multi-file, some ambiguity, 20-200 lines | Plan-then-implement. State assumptions. P37 verify. |
+| **Complex** | Cross-cutting concerns, ambiguous spec, >200 lines, unfamiliar domain | P38 explore → P37 verify → implement → P39 feedback loop. |
+| **Research** | Unknown solution space, no clear approach | Research first (web search, codebase analysis) → P38 explore → implement iteratively. |
+
+**Rule**: Never apply Complex-level reasoning to Simple tasks (wastes tokens). Never apply Simple-level reasoning to Complex tasks (causes failures).
+
+*Research basis: SEER adaptive CoT, test-time compute scaling (2-3x gains from adaptive depth)*
+
+### Pattern 41: Atomic Task Loop (ATL)
+For multi-step changes, decompose into atomic units with clean boundaries.
+
+**Detection**: Task involves changes to 3+ files, or multiple independent concerns
+
+**Protocol**:
+1. **Decompose** the task into atomic sub-tasks (each independently testable)
+2. **Order** by dependency (upstream changes first)
+3. **For each sub-task**:
+   a. Implement the change (single concern only)
+   b. Run relevant tests
+   c. Commit if tests pass
+   d. If context is getting long/confused, note progress and continue fresh
+4. **Final verification**: Run full test suite after all sub-tasks complete
+
+**Atomicity rules**:
+- Each sub-task modifies ideally 1-2 files
+- Each sub-task has a clear pass/fail criterion
+- Sub-tasks should not depend on uncommitted work from other sub-tasks
+- If a sub-task fails, only that sub-task needs rework
+
+*Research basis: Addy Osmani's continuous coding loop, context drift prevention research*
+
+### Pattern 42: Critic-Before-Commit (CBC)
+Review your own diff against requirements before running tests.
+
+**Detection**: Any implementation about to be tested or committed
+
+**Protocol**:
+```
+=== SELF-REVIEW ===
+Diff summary: [what changed, in which files]
+
+REQUIREMENT CHECK:
+☐ Does the diff address ALL requirements from the task?
+☐ Are there any unintended changes (debug prints, commented code, temp files)?
+☐ Does the code handle the error/edge cases mentioned in the spec?
+☐ Is the code consistent with surrounding style and conventions?
+☐ Would this diff make sense to a reviewer with no context?
+
+ISSUES FOUND: [list or "none"]
+=== END REVIEW ===
+```
+
+**If issues found**: Fix BEFORE running tests. Cheaper to catch logic errors by reading than by test-debug cycles.
+
+*Research basis: Multi-agent reflection (actor+critic, +20% accuracy), RL^V unified reasoner-verifier*
+
+---
+
+## CONTEXT OPTIMIZATION
+
+**Reduce token waste and improve response quality through intelligent context management.**
+
+### Progressive Context Disclosure
+Not all patterns are needed for every task. The Pattern Router activates only relevant patterns.
+- **Always loaded**: Pattern Router, Completion Gates, Error Recovery
+- **Loaded on activation**: Only patterns flagged YES by router
+- **Summarize, don't repeat**: When referencing prior work, summarize in 1-2 lines, don't paste full output
+
+### Context Hygiene
+- **Prune completed context**: After a sub-task completes, don't carry its full debug output forward
+- **Compress tool output**: Quote only the 2-3 lines that inform the next decision
+- **Avoid context poisoning**: Don't include failed approaches in context unless actively debugging them
+- **Reset on drift**: If responses become unfocused or repetitive, summarize progress and continue with clean context
+
+### Token Budget Awareness
+| Task Type | Target Context Usage | Strategy |
+|-----------|---------------------|----------|
+| Simple fix | <10% of window | Direct implementation, minimal exploration |
+| Feature implementation | 30-50% of window | Structured exploration, then focused implementation |
+| Complex debugging | 50-70% of window | Deep investigation justified, but prune between attempts |
+| Research/exploration | 20-40% of window | Broad search first, then narrow and deep |
+
+---
+
+## SELF-IMPROVEMENT PROTOCOL
+
+**The agent improves its own effectiveness over time by learning from outcomes.**
+
+### After Task Completion (Success or Failure)
+1. **Record outcome** with structured metadata:
+   ```bash
+   sqlite3 ./{{MEMORY_DB_PATH}} "INSERT INTO session_memories (session_id,timestamp,type,content,importance) VALUES ('current',datetime('now'),'outcome','task:<summary>|result:<pass/fail>|patterns_used:<list>|time_spent:<estimate>|failure_type:<category_or_none>',8);"
+   ```
+
+2. **If failure occurred**: Store in semantic memory for cross-session learning:
+   ```bash
+   {{MEMORY_STORE_CMD}} lesson "Failed on <task_type>: <what_went_wrong>. Fix: <what_worked>." --tags failure,<category>,<language> --importance 8
+   ```
+
+3. **If novel technique discovered**: Store as reusable pattern:
+   ```bash
+   {{MEMORY_STORE_CMD}} lesson "New technique for <domain>: <technique_description>. Use when <conditions>." --tags technique,<domain> --importance 9
+   ```
+
+### Before Starting Similar Tasks
+Query memory for relevant past outcomes:
+```bash
+sqlite3 ./{{MEMORY_DB_PATH}} "SELECT content FROM memories WHERE type='failure_analysis' AND content LIKE '%<relevant_keyword>%' ORDER BY timestamp DESC LIMIT 5;"
+```
+
+### Repo-Specific Learning
+Over time, accumulate repository-specific patterns:
+- Which test frameworks and assertions this repo uses
+- Common failure modes in this codebase
+- Preferred code style and naming conventions
+- Architecture decisions and their rationale
+
+Store these as high-importance semantic memories tagged with the repo name.
+
+---
+
+## CODE QUALITY HEURISTICS
+
+**Apply to ALL generated code. Verify before committing.**
+
+### Pre-Commit Code Review Checklist
+- [ ] Functions ≤ 30 lines (split if longer)
+- [ ] No God objects or functions doing multiple unrelated things
+- [ ] Names are self-documenting (no single-letter variables outside loops)
+- [ ] Error paths handled explicitly (not just happy path)
+- [ ] No debug prints, console.logs, or commented-out code left behind
+- [ ] Consistent with surrounding code style (indentation, naming, patterns)
+- [ ] No hardcoded values that should be constants or config
+- [ ] Imports are minimal — only what's actually used
+
+### Code Smell Detection
+If you notice any of these, fix before committing:
+- **Duplicated logic** → Extract to shared function
+- **Deep nesting (>3 levels)** → Early returns, extract helper
+- **Boolean parameters** → Consider separate methods or options object
+- **Magic numbers** → Named constants
+- **Catch-all error handling** → Specific error types with appropriate responses
+
+---
+
 ## SESSION START PROTOCOL
 
 **EXECUTE IMMEDIATELY before any response:**
@@ -538,6 +766,7 @@ uam agent overlaps --resource "<files-or-directories>"
 | Performance | `performance-optimizer` | algorithms, memory, caching |
 | Documentation | `documentation-expert` | jsdoc, readme, api-docs |
 | Code quality | `code-quality-guardian` | complexity, naming, solid |
+| Solution verification | self (P42 CBC) | diff review, requirement check |
 
 {{#if LANGUAGE_DROIDS}}
 ### Language Droids
@@ -587,13 +816,17 @@ uam agent overlaps --resource "<files-or-directories>"
 ## DECISION LOOP
 
 ```
-0. CLASSIFY -> backup? tool? steps?
-1. PROTECT  -> cp file file.bak
-2. MEMORY   -> query relevant context
-3. AGENTS   -> check overlaps
-4. SKILLS   -> check {{SKILLS_PATH}}
-5. WORKTREE -> create, work, PR
-6. VERIFY   -> gates pass
+0. CLASSIFY  -> complexity? backup? tool? steps? (P40 Adaptive Depth)
+1. PROTECT   -> cp file file.bak
+2. MEMORY    -> query relevant context + past failures (P39)
+3. EXPLORE   -> if complex: generate 2-3 approaches (P38)
+4. VERIFY    -> pre-implementation check (P37)
+5. AGENTS    -> check overlaps
+6. SKILLS    -> check {{SKILLS_PATH}}
+7. WORKTREE  -> create, work (P41 atomic tasks)
+8. REVIEW    -> self-review diff (P42)
+9. TEST      -> gates pass
+10. LEARN    -> store outcome in memory (P39)
 ```
 
 ---
@@ -906,13 +1139,15 @@ echo "=== GATE 3: TEST VERIFICATION ==="
 ☐ Tests pass
 ☐ Lint/typecheck pass
 ☐ Worktree used (not {{DEFAULT_BRANCH}})
-☐ Memory updated
+☐ Self-review completed (P42)
+☐ Memory updated (outcome + lessons from P39)
 ☐ PR created
 ☐ Parallel reviews passed
 {{#if HAS_INFRA}}
 ☐ IaC parity verified
 {{/if}}
 ☐ No secrets in code
+☐ No debug artifacts left (console.logs, commented code, temp files)
 ```
 
 ---
@@ -959,12 +1194,15 @@ When a task provides a decoder, validator, or expected output format:
 ## ERROR RECOVERY ESCALATION
 
 On any test failure or error:
-1. **Read exact error message** - do not guess
-2. **If same error twice**: change approach completely, do not retry same fix
-3. **If dependency missing**: install it (`pip install`, `npm install`, `apt-get`)
-4. **If permission denied**: use alternative path or `chmod`
-5. **If timeout**: reduce scope, submit partial solution
-6. **Never repeat a failed command** without modification
+1. **Categorize** using P39 Failure Taxonomy (`dependency_missing`, `wrong_approach`, `format_mismatch`, `edge_case`, `state_mutation`, `concurrency`, `timeout`, `environment`)
+2. **Read exact error message** - do not guess
+3. **Query memory** for past failures of this type: `SELECT content FROM memories WHERE type='failure_analysis' AND content LIKE '%<type>%' LIMIT 3;`
+4. **If same error twice**: change approach completely (P38 Branching), do not retry same fix
+5. **If dependency missing**: install it (`pip install`, `npm install`, `apt-get`)
+6. **If permission denied**: use alternative path or `chmod`
+7. **If timeout**: reduce scope, submit partial solution
+8. **Store failure** in memory after resolution (P39 protocol)
+9. **Never repeat a failed command** without modification
 
 ---
 
@@ -1015,6 +1253,7 @@ If timeout approaching: submit best partial solution rather than nothing.
    === PATTERN ROUTER ===
    Task: [one-line task summary]
    Classification: [file-creation | constraint-validation | adversarial | pipeline | impossible]
+   Complexity: [simple | moderate | complex | research] (P40)
 
    SELECTED PATTERNS:
    - P12 (OEV): [YES/NO] - Does task require creating files?
@@ -1022,6 +1261,16 @@ If timeout approaching: submit best partial solution rather than nothing.
    - P20 (AT): [YES/NO] - Does task involve "bypass/break/exploit/filter"?
    - P11 (Pre-computed): [YES/NO] - Is this a known algorithm (crypto/chess/ML)?
    - P18 (MTP): [YES/NO] - Does task need multiple tools chained?
+   - P37 (PIV): [YES/NO] - Non-trivial implementation needing plan verification?
+   - P38 (BE): [YES/NO] - Multiple valid approaches or high ambiguity?
+   - P41 (ATL): [YES/NO] - Changes span 3+ files or multiple concerns?
+   - P42 (CBC): [YES/NO] - Implementation that will be committed?
+
+   REASONING DEPTH (per P40):
+   - Simple → Direct implementation
+   - Moderate → Plan, verify (P37), implement
+   - Complex → Explore (P38), verify (P37), implement, feedback (P39)
+   - Research → Search first, then explore (P38), implement iteratively
 
    ACTIVE PATTERNS: [list only YES patterns]
    === END ROUTER ===
@@ -1085,7 +1334,19 @@ If timeout approaching: submit best partial solution rather than nothing.
 15. **REFUSE IMPOSSIBLE**: If task violates information theory (compress 500MB to 5KB),
     REFUSE immediately. Create IMPOSSIBLE.md explaining why. Don't attempt.
 
-16. **ADVERSARIAL MINDSET (MANDATORY)**: If P20 is active, you MUST:
+16. **VERIFY BEFORE CODING (P37)**: For moderate+ complexity tasks, print the
+    PRE-IMPLEMENTATION VERIFY block. Catch wrong approaches before wasting tokens.
+
+17. **EXPLORE BEFORE COMMITTING (P38)**: For complex/ambiguous tasks, generate 2-3
+    candidate approaches and evaluate before coding. 5% exploration saves 50% rework.
+
+18. **LEARN FROM FAILURES (P39)**: After ANY test failure, categorize it using the
+    Failure Taxonomy and store structured feedback in memory. Query memory before similar tasks.
+
+19. **REVIEW YOUR OWN DIFF (P42)**: Before running tests, do a self-review of your
+    changes against requirements. Catch logic errors by reading, not by test-debug cycles.
+
+20. **ADVERSARIAL MINDSET (MANDATORY)**: If P20 is active, you MUST:
     ```
     === ADVERSARIAL ANALYSIS ===
     Target: [what are we trying to bypass/break?]
