@@ -76,7 +76,7 @@ uam agent status
 3. MEMORY    -> query relevant context + past failures
 4. AGENTS    -> check overlaps (if multi-agent)
 5. SKILLS    -> check .factory/skills/ for domain-specific guidance
-6. WORK      -> implement (use worktree for 3+ file changes)
+6. WORK      -> implement (ALWAYS use worktree for ANY file changes)
 7. REVIEW    -> self-review diff before testing
 8. TEST      -> completion gates pass
 9. LEARN     -> store outcome in memory
@@ -113,23 +113,26 @@ Decay: `effective_importance = importance * (0.95 ^ days_since_access)`
 
 ---
 
-## WORKTREE WORKFLOW
+## WORKTREE WORKFLOW — MANDATORY
+
+> **MANDATORY**: ALL file changes MUST use a worktree. No exceptions. Never commit directly to any branch without a worktree. After PR is merged, worktree cleanup is MANDATORY — never leave stale worktrees.
 
 | Change Scope | Workflow |
 |-------------|----------|
-| Single-file fix (<20 lines) | Direct commit to feature branch |
-| Multi-file change (2-5 files) | Worktree recommended |
-| Feature/refactor (3+ files) | Worktree required |
+| ANY file change (even single-file) | **Worktree REQUIRED** |
 
 ```bash
-uam worktree create <slug>           # Create
+uam worktree create <slug>           # ALWAYS create first
 cd .worktrees/NNN-<slug>/
 git add -A && git commit -m "type: description"
-uam worktree pr <id>                 # PR
-uam worktree cleanup <id>            # Cleanup after merge
+uam worktree pr <id>                 # Create PR
+# After PR merge:
+uam worktree cleanup <id>            # MANDATORY cleanup after merge
 ```
 
-**Applies to**: Application code, configs, workflows, documentation, CLAUDE.md itself
+**Applies to**: Application code, configs, workflows, documentation, CLAUDE.md itself — ALL changes without exception
+
+**Cleanup is MANDATORY**: After every PR merge, immediately run `uam worktree cleanup <id>`. Never leave merged worktrees behind.
 
 ---
 
@@ -213,8 +216,7 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 | work request (fix/add/change/update/create/implement/build) | `uam task create --type task` |
 | bug report/error | `uam task create --type bug` |
 | feature request | `uam task create --type feature` |
-| single-file fix | direct commit to branch |
-| multi-file feature (3+ files) | create worktree |
+| ANY file change | **create worktree (MANDATORY)** |
 | review/check/look | query memory first |
 | ANY code change | tests required |
 
@@ -294,7 +296,7 @@ Files requiring extra attention during changes:
 
 - **Memory DB Path**: Always relative `./agents/data/memory/short_term.db`
 - **Qdrant**: Must be running for semantic search (`cd agents && docker-compose up -d`)
-- **Worktrees**: Never commit directly to `main`
+- **Worktrees**: MANDATORY for ALL file changes. Never commit directly to any branch. Always cleanup after PR merge.
 - **Pattern Router**: Must print analysis block before starting work
 - **Template Changes**: Run `npm run build && uam generate --force` after editing
 
@@ -397,7 +399,8 @@ If < 100%: iterate (fix specific failure, re-run). Reserve 20% of time for itera
 ```
 ☐ Tests pass
 ☐ Lint/typecheck pass
-☐ Worktree used (not main)
+☐ Worktree used (MANDATORY for ALL changes)
+☐ Worktree cleaned up after PR merge (MANDATORY)
 ☐ Self-review completed
 ☐ Memory updated
 ☐ PR created
@@ -411,10 +414,10 @@ If < 100%: iterate (fix specific failure, re-run). Reserve 20% of time for itera
 ## COMPLETION PROTOCOL
 
 ```
-MERGE -> DEPLOY -> MONITOR -> FIX (iterate until 100%)
+MERGE -> CLEANUP WORKTREE -> DEPLOY -> MONITOR -> FIX (iterate until 100%)
 ```
 
-**Never "done" until:** PR merged + deployed + verified working
+**Never "done" until:** PR merged + worktree cleaned up + deployed + verified working
 
 ---
 
@@ -482,7 +485,7 @@ A: UAM works without Docker....
 - Detect these ...
 
 ### Hot Spots
-Frequently modified files (hot spots): package.json (79 changes), package-lock.json (51 changes), templates/CLAUDE.template.md (46 changes), .beads/issues.jsonl (31 changes), CLAUDE.md (26 changes), src/generators/claude-md.ts (16 changes), src/bin/cli.ts (12 changes), src/uam_harbor/uam_agent.py (11 changes), src/index.ts (10 changes), src/cli/memory.ts (9 changes). These files may need extra attention during changes.
+Frequently modified files (hot spots): package.json (78 changes), package-lock.json (50 changes), templates/CLAUDE.template.md (47 changes), .beads/issues.jsonl (31 changes), CLAUDE.md (26 changes), src/generators/claude-md.ts (15 changes), src/uam_harbor/uam_agent.py (12 changes), src/bin/cli.ts (11 changes), src/index.ts (10 changes), src/cli/memory.ts (8 changes). These files may need extra attention during changes.
 
 ---
 
