@@ -120,7 +120,7 @@ uam agent status
 3. MEMORY    -> query relevant context + past failures
 4. AGENTS    -> check overlaps (if multi-agent)
 5. SKILLS    -> check {{SKILLS_PATH}} for domain-specific guidance
-6. WORK      -> implement (use worktree for 3+ file changes)
+6. WORK      -> implement (ALWAYS use worktree for ANY file changes)
 7. REVIEW    -> self-review diff before testing
 8. TEST      -> completion gates pass
 9. LEARN     -> store outcome in memory
@@ -157,23 +157,26 @@ Decay: `effective_importance = importance * (0.95 ^ days_since_access)`
 
 ---
 
-## WORKTREE WORKFLOW
+## WORKTREE WORKFLOW — MANDATORY
+
+> **MANDATORY**: ALL file changes MUST use a worktree. No exceptions. Never commit directly to any branch without a worktree. After PR is merged, worktree cleanup is MANDATORY — never leave stale worktrees.
 
 | Change Scope | Workflow |
 |-------------|----------|
-| Single-file fix (<20 lines) | Direct commit to feature branch |
-| Multi-file change (2-5 files) | Worktree recommended |
-| Feature/refactor (3+ files) | Worktree required |
+| ANY file change (even single-file) | **Worktree REQUIRED** |
 
 ```bash
-{{WORKTREE_CREATE_CMD}} <slug>           # Create
+{{WORKTREE_CREATE_CMD}} <slug>           # ALWAYS create first
 cd {{WORKTREE_DIR}}/NNN-<slug>/
 git add -A && git commit -m "type: description"
-{{WORKTREE_PR_CMD}} <id>                 # PR
-{{WORKTREE_CLEANUP_CMD}} <id>            # Cleanup after merge
+{{WORKTREE_PR_CMD}} <id>                 # Create PR
+# After PR merge:
+{{WORKTREE_CLEANUP_CMD}} <id>            # MANDATORY cleanup after merge
 ```
 
-**Applies to**: {{WORKTREE_APPLIES_TO}}
+**Applies to**: {{WORKTREE_APPLIES_TO}} — ALL changes without exception
+
+**Cleanup is MANDATORY**: After every PR merge, immediately run `{{WORKTREE_CLEANUP_CMD}} <id>`. Never leave merged worktrees behind.
 
 ---
 
@@ -265,8 +268,7 @@ Task(subagent_type: "documentation-expert", prompt: "Check: <files>")
 | work request (fix/add/change/update/create/implement/build) | `uam task create --type task` |
 | bug report/error | `uam task create --type bug` |
 | feature request | `uam task create --type feature` |
-| single-file fix | direct commit to branch |
-| multi-file feature (3+ files) | create worktree |
+| ANY file change | **create worktree (MANDATORY)** |
 | review/check/look | query memory first |
 | ANY code change | tests required |
 
@@ -406,7 +408,8 @@ If < 100%: iterate (fix specific failure, re-run). Reserve 20% of time for itera
 ```
 ☐ Tests pass
 ☐ Lint/typecheck pass
-☐ Worktree used (not {{DEFAULT_BRANCH}})
+☐ Worktree used (MANDATORY for ALL changes)
+☐ Worktree cleaned up after PR merge (MANDATORY)
 ☐ Self-review completed
 ☐ Memory updated
 ☐ PR created
@@ -423,10 +426,10 @@ If < 100%: iterate (fix specific failure, re-run). Reserve 20% of time for itera
 ## COMPLETION PROTOCOL
 
 ```
-MERGE -> DEPLOY -> MONITOR -> FIX (iterate until 100%)
+MERGE -> CLEANUP WORKTREE -> DEPLOY -> MONITOR -> FIX (iterate until 100%)
 ```
 
-**Never "done" until:** PR merged + deployed + verified working
+**Never "done" until:** PR merged + worktree cleaned up + deployed + verified working
 
 ---
 
