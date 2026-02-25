@@ -32,4 +32,9 @@ export type {
   ExecuteToolArgs,
   ToolRegistry,
   RouterStats,
+  OutputCompressionStats,
 } from './types.js';
+export { compressToolOutput } from './output-compressor.js';
+export type { CompressedOutput, CompressionStats } from './output-compressor.js';
+export { SessionStats, globalSessionStats } from './session-stats.js';
+export type { StatsSummary, ToolBreakdown, ToolCallRecord } from './session-stats.js';

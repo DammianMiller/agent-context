@@ -45,6 +45,14 @@ export interface DiscoverToolsArgs {
 export interface ExecuteToolArgs {
   path: string;
   args?: Record<string, unknown>;
+  intent?: string;
+}
+
+export interface OutputCompressionStats {
+  originalBytes: number;
+  compressedBytes: number;
+  savings: string;
+  method: 'passthrough' | 'truncated' | 'indexed';
 }
 
 export interface ToolRegistry {

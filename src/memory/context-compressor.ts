@@ -282,6 +282,41 @@ function getDateRange(timestamps: string[]): string {
 }
 
 /**
+ * Smart truncation using head+tail split.
+ * Preserves both initial context (setup, config) and final output (errors, results).
+ * Head gets 60%, tail gets 40% of the allowed line budget.
+ */
+export function smartTruncate(content: string, maxChars: number): string {
+  if (content.length <= maxChars) return content;
+
+  const lines = content.split('\n');
+  if (lines.length <= 4) {
+    // Too few lines for head+tail split, just char-truncate
+    return content.slice(0, maxChars) + '\n... [truncated]';
+  }
+
+  const ratio = Math.min(1, maxChars / content.length);
+  const totalLines = Math.max(2, Math.floor(lines.length * ratio));
+  const headLines = Math.max(1, Math.ceil(totalLines * 0.6));
+  const tailLines = Math.max(1, totalLines - headLines);
+
+  // Avoid overlap when head + tail >= total lines
+  if (headLines + tailLines >= lines.length) {
+    return content.slice(0, maxChars) + '\n... [truncated]';
+  }
+
+  const headPart = lines.slice(0, headLines);
+  const tailPart = lines.slice(-tailLines);
+  const omitted = lines.length - headLines - tailLines;
+
+  return [
+    ...headPart,
+    `\n... [${omitted} lines truncated — showing first ${headLines} + last ${tailLines} lines] ...\n`,
+    ...tailPart,
+  ].join('\n');
+}
+
+/**
  * Context budget manager
  */
 export class ContextBudget {
@@ -303,10 +338,10 @@ export class ContextBudget {
       return { content, tokens, truncated: false };
     }
     
-    // Need to truncate
+    // Need to truncate - use head+tail split to preserve error context
     const targetTokens = Math.floor(available * 0.9);
     const targetChars = targetTokens * 4;
-    const truncated = content.slice(0, targetChars) + '... [truncated]';
+    const truncated = smartTruncate(content, targetChars);
     const actualTokens = estimateTokens(truncated);
     
     this.usedTokens += actualTokens;
