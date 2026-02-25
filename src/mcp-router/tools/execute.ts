@@ -5,9 +5,11 @@
  * Routes tool calls to the appropriate MCP server.
  */
 
-import type { ExecuteToolArgs } from '../types.js';
+import type { ExecuteToolArgs, OutputCompressionStats } from '../types.js';
 import type { ToolSearchIndex } from '../search/fuzzy.js';
 import type { McpClientPool } from '../executor/client.js';
+import { compressToolOutput } from '../output-compressor.js';
+import { globalSessionStats } from '../session-stats.js';
 
 export const EXECUTE_TOOL_DEFINITION = {
   name: 'execute_tool',
@@ -33,6 +35,10 @@ The args object should match the tool's expected input schema.`,
         description: 'Arguments to pass to the tool (schema depends on the specific tool)',
         additionalProperties: true,
       },
+      intent: {
+        type: 'string',
+        description: 'Optional: describe what you are looking for in the output. For large results (>10KB), only matching sections are returned instead of the full output.',
+      },
     },
     required: ['path'],
   },
@@ -44,6 +50,7 @@ export interface ExecuteResult {
   error?: string;
   toolPath: string;
   executionTimeMs: number;
+  compressionStats?: OutputCompressionStats;
 }
 
 export async function handleExecuteTool(
@@ -52,7 +59,7 @@ export async function handleExecuteTool(
   clientPool: McpClientPool
 ): Promise<ExecuteResult> {
   const startTime = Date.now();
-  const { path, args: toolArgs = {} } = args;
+  const { path, args: toolArgs = {}, intent } = args;
   
   // Parse path
   const dotIndex = path.indexOf('.');
@@ -90,13 +97,24 @@ export async function handleExecuteTool(
   
   try {
     await client.connect();
-    const result = await client.callTool(toolName, toolArgs as Record<string, unknown>);
+    const rawResult = await client.callTool(toolName, toolArgs as Record<string, unknown>);
+    
+    // Compress output to save context window
+    const compressed = compressToolOutput(rawResult, { intent });
+    
+    // Record stats
+    globalSessionStats.record(
+      path,
+      compressed.stats.originalBytes,
+      compressed.stats.compressedBytes
+    );
     
     return {
       success: true,
-      result,
+      result: compressed.output,
       toolPath: path,
       executionTimeMs: Date.now() - startTime,
+      compressionStats: compressed.stats,
     };
   } catch (error) {
     return {

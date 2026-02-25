@@ -26,8 +26,9 @@ import {
 } from './visualize.js';
 import { STATUS_ICONS, TYPE_ICONS, PRIORITY_LABELS } from '../tasks/types.js';
 import type { TaskType, TaskPriority } from '../tasks/types.js';
+import { globalSessionStats } from '../mcp-router/session-stats.js';
 
-type DashboardAction = 'overview' | 'tasks' | 'agents' | 'memory' | 'progress';
+type DashboardAction = 'overview' | 'tasks' | 'agents' | 'memory' | 'progress' | 'stats';
 
 interface DashboardOptions {
   verbose?: boolean;
@@ -53,6 +54,9 @@ export async function dashboardCommand(
       break;
     case 'progress':
       await showProgressDashboard(options);
+      break;
+    case 'stats':
+      await showStatsDashboard(options);
       break;
   }
 }
@@ -757,4 +761,57 @@ async function showProgressDashboard(_options: DashboardOptions): Promise<void> 
     spinner.fail('Failed to load progress dashboard');
     console.error(chalk.red(error instanceof Error ? error.message : String(error)));
   }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)} sec`;
+  return `${(ms / 60000).toFixed(1)} min`;
+}
+
+async function showStatsDashboard(_options: DashboardOptions): Promise<void> {
+  const summary = globalSessionStats.getSummary();
+
+  console.log('');
+  console.log(chalk.bold.cyan('  Session Stats'));
+  console.log(divider(60));
+  console.log('');
+
+  const estimatedTokens = Math.round(summary.totalContextBytes / 4);
+
+  for (const line of keyValue([
+    ['Uptime', formatDuration(summary.uptimeMs)],
+    ['Tool calls', String(summary.totalCalls)],
+    ['Context used', `${formatBytes(summary.totalContextBytes)} (~${estimatedTokens.toLocaleString()} tokens)`],
+    ['Raw data processed', formatBytes(summary.totalRawBytes)],
+    ['Savings ratio', `${summary.savingsRatio}x (${summary.savingsPercent} reduction)`],
+  ])) console.log(line);
+
+  if (summary.byTool.length > 0) {
+    console.log('');
+    console.log(sectionHeader('Per-Tool Breakdown'));
+    console.log('');
+
+    const rows = summary.byTool.map(t => [
+      chalk.white(t.tool),
+      `${t.calls} call${t.calls !== 1 ? 's' : ''}`,
+      formatBytes(t.contextBytes),
+    ]);
+
+    for (const row of rows) {
+      console.log(`  ${row[0].padEnd(35)} ${row[1].padEnd(12)} ${row[2]}`);
+    }
+  }
+
+  if (summary.totalCalls === 0) {
+    console.log('');
+    console.log(chalk.dim('  No tool calls recorded yet. Stats populate when MCP Router processes requests.'));
+  }
+
+  console.log('');
 }

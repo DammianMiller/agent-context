@@ -5,6 +5,7 @@ import {
   summarizeMemories,
   estimateTokens,
   ContextBudget,
+  smartTruncate,
 } from './context-compressor.js';
 import {
   HierarchicalMemoryManager,
@@ -99,6 +100,43 @@ describe('Context Budget', () => {
     expect(usage.sections).toHaveProperty('section1');
     expect(usage.sections).toHaveProperty('section2');
     expect(usage.used).toBeGreaterThan(0);
+  });
+});
+
+describe('Smart Truncation', () => {
+  it('should not truncate content within maxChars', () => {
+    const content = 'line 1\nline 2\nline 3';
+    const result = smartTruncate(content, 1000);
+    expect(result).toBe(content);
+  });
+
+  it('should preserve first and last lines with head+tail split', () => {
+    const lines = Array.from({ length: 100 }, (_, i) => `line ${i}: data here`);
+    const content = lines.join('\n');
+    const result = smartTruncate(content, 500);
+
+    expect(result).toContain('line 0:');
+    expect(result).toContain('line 99:');
+    expect(result).toContain('lines truncated');
+  });
+
+  it('should show accurate omitted line count', () => {
+    const lines = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const content = lines.join('\n');
+    const result = smartTruncate(content, 200);
+
+    const match = result.match(/(\d+) lines truncated/);
+    expect(match).not.toBeNull();
+    const omitted = parseInt(match![1], 10);
+    expect(omitted).toBeGreaterThan(0);
+    expect(omitted).toBeLessThan(50);
+
+    // Head + tail + omitted should equal total lines
+    const showingMatch = result.match(/showing first (\d+) \+ last (\d+)/);
+    expect(showingMatch).not.toBeNull();
+    const head = parseInt(showingMatch![1], 10);
+    const tail = parseInt(showingMatch![2], 10);
+    expect(head + tail + omitted).toBe(50);
   });
 });
 

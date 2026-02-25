@@ -503,6 +503,12 @@ program
       .description('Completion tracking with per-priority and per-type progress')
       .option('-v, --verbose', 'Show detailed information')
       .action((options) => dashboardCommand('progress', options))
+  )
+  .addCommand(
+    new Command('stats')
+      .description('Session context consumption stats with per-tool breakdown')
+      .option('-v, --verbose', 'Show detailed information')
+      .action((options) => dashboardCommand('stats', options))
   );
 
 // Multi-Model Architecture commands
